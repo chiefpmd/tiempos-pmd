@@ -66,7 +66,19 @@
 
             <div class="bg-white rounded-lg shadow overflow-x-auto">
                 <table class="min-w-full text-xs">
+                    @php
+                        $semanas = collect($diasHabiles)->groupBy(fn($d) => $d->weekOfYear);
+                    @endphp
                     <thead class="bg-gray-50">
+                        <tr>
+                            <th class="px-2 py-1 sticky left-0 bg-gray-50 z-10" colspan="4"></th>
+                            @foreach($semanas as $numSemana => $diasSemana)
+                                <th class="text-center font-bold text-blue-600 bg-blue-50 border-l-2 border-blue-200 text-xs" colspan="{{ count($diasSemana) }}">
+                                    Sem {{ $numSemana }}
+                                </th>
+                            @endforeach
+                            <th></th>
+                        </tr>
                         <tr>
                             <th class="px-2 py-1 text-left font-medium text-gray-500 sticky left-0 bg-gray-50 z-10" style="min-width:100px">Mueble</th>
                             <th class="px-2 py-1 text-left font-medium text-gray-500" style="min-width:180px">Descripcion</th>
