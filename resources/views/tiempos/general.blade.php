@@ -75,10 +75,14 @@
 
             @if($isAdmin)
             <div class="shift-form items-center space-x-2 mb-2 bg-purple-50 p-2 rounded shadow-sm" id="shift-form-{{ $proyecto->id }}" style="display:none">
-                <div class="flex items-center space-x-2">
-                    <label class="text-xs font-medium text-purple-700">Dias habiles a recorrer:</label>
+                <div class="flex items-center space-x-2 flex-wrap gap-y-1">
+                    <label class="text-xs font-medium text-purple-700">Dias habiles:</label>
                     <input type="number" id="shift-dias-{{ $proyecto->id }}" value="1" min="-60" max="60" class="border rounded px-2 py-1 text-sm w-20 text-center">
-                    <span class="text-xs text-gray-500">(positivo = adelante, negativo = atras)</span>
+                    <span class="text-xs text-gray-500">(+ adelante, - atras)</span>
+                    <span class="text-xs text-purple-700 font-medium ml-2">Procesos:</span>
+                    <label class="text-xs flex items-center space-x-1"><input type="checkbox" class="shift-proceso" data-proyecto="{{ $proyecto->id }}" value="Carpintería" checked><span>Carpintería</span></label>
+                    <label class="text-xs flex items-center space-x-1"><input type="checkbox" class="shift-proceso" data-proyecto="{{ $proyecto->id }}" value="Barniz" checked><span>Barniz</span></label>
+                    <label class="text-xs flex items-center space-x-1"><input type="checkbox" class="shift-proceso" data-proyecto="{{ $proyecto->id }}" value="Instalación" checked><span>Instalación</span></label>
                     <button type="button" class="bg-purple-600 text-white px-3 py-1 rounded text-sm hover:bg-purple-700 btn-shift" data-proyecto="{{ $proyecto->id }}">Aplicar</button>
                     <button type="button" class="text-gray-400 hover:text-gray-600 text-sm toggle-shift" data-proyecto="{{ $proyecto->id }}">Cancelar</button>
                 </div>
@@ -275,7 +279,15 @@ document.addEventListener('DOMContentLoaded', function() {
             const proyectoId = this.dataset.proyecto;
             const dias = document.getElementById('shift-dias-' + proyectoId).value;
             if (!dias || dias == 0) return alert('Ingresa dias habiles a recorrer');
-            if (!confirm('Recorrer todas las fechas del proyecto ' + dias + ' dias habiles. Continuar?')) return;
+
+            const procesos = [];
+            document.querySelectorAll('.shift-proceso[data-proyecto="' + proyectoId + '"]:checked').forEach(cb => {
+                procesos.push(cb.value);
+            });
+            if (procesos.length === 0) return alert('Selecciona al menos un proceso');
+
+            const msg = 'Recorrer ' + procesos.join(', ') + ' del proyecto ' + dias + ' dias habiles. Continuar?';
+            if (!confirm(msg)) return;
 
             this.disabled = true;
             this.textContent = 'Aplicando...';
@@ -287,7 +299,7 @@ document.addEventListener('DOMContentLoaded', function() {
                     'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').content,
                     'Accept': 'application/json'
                 },
-                body: JSON.stringify({ dias_habiles: parseInt(dias) })
+                body: JSON.stringify({ dias_habiles: parseInt(dias), procesos: procesos })
             })
             .then(r => r.json())
             .then(data => {

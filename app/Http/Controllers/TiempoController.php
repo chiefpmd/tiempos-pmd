@@ -179,6 +179,8 @@ class TiempoController extends Controller
     {
         $data = $request->validate([
             'dias_habiles' => 'required|integer|min:-60|max:60',
+            'procesos' => 'required|array|min:1',
+            'procesos.*' => 'in:Carpintería,Barniz,Instalación',
         ]);
 
         $diasHabiles = (int) $data['dias_habiles'];
@@ -187,7 +189,9 @@ class TiempoController extends Controller
         }
 
         $muebleIds = $proyecto->muebles()->pluck('id');
-        $tiempos = Tiempo::whereIn('mueble_id', $muebleIds)->get();
+        $tiempos = Tiempo::whereIn('mueble_id', $muebleIds)
+            ->whereIn('proceso', $data['procesos'])
+            ->get();
 
         if ($tiempos->isEmpty()) {
             return response()->json(['ok' => false, 'error' => 'No hay tiempos para recorrer']);
