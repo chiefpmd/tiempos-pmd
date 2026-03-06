@@ -223,9 +223,13 @@ class TiempoController extends Controller
                 'user_id' => auth()->id(),
             ]);
 
-            // Poner fechas temporales para evitar colisiones con unique constraint
-            $ids = $tiempos->pluck('id');
-            Tiempo::whereIn('id', $ids)->update(['fecha' => '1900-01-01']);
+            // Poner fechas temporales únicas para evitar colisiones con unique constraint
+            $counter = 1;
+            foreach ($tiempos as $tiempo) {
+                $tempDate = Carbon::parse('1900-01-01')->addDays($counter);
+                Tiempo::where('id', $tiempo->id)->update(['fecha' => $tempDate]);
+                $counter++;
+            }
 
             // Aplicar fechas nuevas
             foreach ($nuevasFechas as $id => $fecha) {
@@ -254,9 +258,13 @@ class TiempoController extends Controller
         try {
             DB::beginTransaction();
 
-            // Primero poner fechas temporales para evitar colisiones
-            $ids = collect($shift->snapshot)->pluck('id');
-            Tiempo::whereIn('id', $ids)->update(['fecha' => '1900-01-01']);
+            // Primero poner fechas temporales únicas para evitar colisiones
+            $counter = 1;
+            foreach ($shift->snapshot as $entry) {
+                $tempDate = Carbon::parse('1900-01-01')->addDays($counter);
+                Tiempo::where('id', $entry['id'])->update(['fecha' => $tempDate]);
+                $counter++;
+            }
 
             // Luego restaurar las fechas originales
             foreach ($shift->snapshot as $entry) {
