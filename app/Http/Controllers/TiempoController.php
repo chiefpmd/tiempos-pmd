@@ -207,17 +207,35 @@ class TiempoController extends Controller
             'fecha' => $t->fecha->format('Y-m-d'),
         ])->toArray();
 
-        $shift = TiempoShift::create([
-            'proyecto_id' => $proyecto->id,
-            'dias_habiles' => $diasHabiles,
-            'snapshot' => $snapshot,
-            'user_id' => auth()->id(),
-        ]);
-
-        // Recorrer cada fecha X días hábiles
+        // Calcular nuevas fechas
+        $nuevasFechas = [];
         foreach ($tiempos as $tiempo) {
-            $tiempo->fecha = $this->moverDiasHabiles($tiempo->fecha, $diasHabiles);
-            $tiempo->save();
+            $nuevasFechas[$tiempo->id] = $this->moverDiasHabiles($tiempo->fecha, $diasHabiles);
+        }
+
+        try {
+            DB::beginTransaction();
+
+            $shift = TiempoShift::create([
+                'proyecto_id' => $proyecto->id,
+                'dias_habiles' => $diasHabiles,
+                'snapshot' => $snapshot,
+                'user_id' => auth()->id(),
+            ]);
+
+            // Poner fechas temporales para evitar colisiones con unique constraint
+            $ids = $tiempos->pluck('id');
+            Tiempo::whereIn('id', $ids)->update(['fecha' => '1900-01-01']);
+
+            // Aplicar fechas nuevas
+            foreach ($nuevasFechas as $id => $fecha) {
+                Tiempo::where('id', $id)->update(['fecha' => $fecha]);
+            }
+
+            DB::commit();
+        } catch (\Exception $e) {
+            DB::rollBack();
+            return response()->json(['ok' => false, 'error' => 'Error al recorrer fechas: ' . $e->getMessage()]);
         }
 
         return response()->json([
@@ -233,11 +251,24 @@ class TiempoController extends Controller
             return response()->json(['ok' => false, 'error' => 'Ya fue revertido']);
         }
 
-        foreach ($shift->snapshot as $entry) {
-            Tiempo::where('id', $entry['id'])->update(['fecha' => $entry['fecha']]);
-        }
+        try {
+            DB::beginTransaction();
 
-        $shift->update(['reverted' => true]);
+            // Primero poner fechas temporales para evitar colisiones
+            $ids = collect($shift->snapshot)->pluck('id');
+            Tiempo::whereIn('id', $ids)->update(['fecha' => '1900-01-01']);
+
+            // Luego restaurar las fechas originales
+            foreach ($shift->snapshot as $entry) {
+                Tiempo::where('id', $entry['id'])->update(['fecha' => $entry['fecha']]);
+            }
+
+            $shift->update(['reverted' => true]);
+            DB::commit();
+        } catch (\Exception $e) {
+            DB::rollBack();
+            return response()->json(['ok' => false, 'error' => 'Error al revertir: ' . $e->getMessage()]);
+        }
 
         return response()->json(['ok' => true]);
     }
