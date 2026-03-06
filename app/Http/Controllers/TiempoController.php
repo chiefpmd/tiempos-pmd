@@ -181,6 +181,8 @@ class TiempoController extends Controller
             'dias_habiles' => 'required|integer|min:-60|max:60',
             'procesos' => 'required|array|min:1',
             'procesos.*' => 'in:Carpintería,Barniz,Instalación',
+            'mueble_ids' => 'nullable|array',
+            'mueble_ids.*' => 'integer|exists:muebles,id',
         ]);
 
         $diasHabiles = (int) $data['dias_habiles'];
@@ -188,7 +190,9 @@ class TiempoController extends Controller
             return response()->json(['ok' => false, 'error' => 'Debe ser diferente de 0']);
         }
 
-        $muebleIds = $proyecto->muebles()->pluck('id');
+        $muebleIds = !empty($data['mueble_ids'])
+            ? $proyecto->muebles()->whereIn('id', $data['mueble_ids'])->pluck('id')
+            : $proyecto->muebles()->pluck('id');
         $tiempos = Tiempo::whereIn('mueble_id', $muebleIds)
             ->whereIn('proceso', $data['procesos'])
             ->get();

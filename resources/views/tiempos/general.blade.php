@@ -86,6 +86,19 @@
                     <button type="button" class="bg-purple-600 text-white px-3 py-1 rounded text-sm hover:bg-purple-700 btn-shift" data-proyecto="{{ $proyecto->id }}">Aplicar</button>
                     <button type="button" class="text-gray-400 hover:text-gray-600 text-sm toggle-shift" data-proyecto="{{ $proyecto->id }}">Cancelar</button>
                 </div>
+                <div class="flex items-center flex-wrap gap-1 mt-1">
+                    <span class="text-xs text-purple-700 font-medium">Muebles:</span>
+                    <label class="text-xs flex items-center space-x-1">
+                        <input type="checkbox" class="shift-todos-muebles" data-proyecto="{{ $proyecto->id }}" checked>
+                        <span class="font-medium">Todos</span>
+                    </label>
+                    @foreach($proyecto->muebles as $mueble)
+                        <label class="text-xs flex items-center space-x-1 bg-white rounded px-1">
+                            <input type="checkbox" class="shift-mueble" data-proyecto="{{ $proyecto->id }}" value="{{ $mueble->id }}" checked>
+                            <span>{{ $mueble->numero }}</span>
+                        </label>
+                    @endforeach
+                </div>
                 @php $shifts = \App\Models\TiempoShift::where('proyecto_id', $proyecto->id)->where('reverted', false)->latest()->limit(5)->get(); @endphp
                 @if($shifts->isNotEmpty())
                 <div class="mt-2 text-xs text-gray-500">
@@ -273,6 +286,24 @@ document.addEventListener('DOMContentLoaded', function() {
         });
     });
 
+    // Shift: "Todos" muebles checkbox toggle
+    document.querySelectorAll('.shift-todos-muebles').forEach(cb => {
+        cb.addEventListener('change', function() {
+            const checks = document.querySelectorAll('.shift-mueble[data-proyecto="' + this.dataset.proyecto + '"]');
+            checks.forEach(c => c.checked = this.checked);
+        });
+    });
+
+    // Shift: uncheck "Todos" when individual mueble unchecked
+    document.querySelectorAll('.shift-mueble').forEach(cb => {
+        cb.addEventListener('change', function() {
+            const pid = this.dataset.proyecto;
+            const all = document.querySelectorAll('.shift-mueble[data-proyecto="' + pid + '"]');
+            const checked = document.querySelectorAll('.shift-mueble[data-proyecto="' + pid + '"]:checked');
+            document.querySelector('.shift-todos-muebles[data-proyecto="' + pid + '"]').checked = all.length === checked.length;
+        });
+    });
+
     // Apply shift
     document.querySelectorAll('.btn-shift').forEach(btn => {
         btn.addEventListener('click', function() {
@@ -286,11 +317,23 @@ document.addEventListener('DOMContentLoaded', function() {
             });
             if (procesos.length === 0) return alert('Selecciona al menos un proceso');
 
-            const msg = 'Recorrer ' + procesos.join(', ') + ' del proyecto ' + dias + ' dias habiles. Continuar?';
+            const muebleIds = [];
+            const todosMuebles = document.querySelector('.shift-todos-muebles[data-proyecto="' + proyectoId + '"]').checked;
+            if (!todosMuebles) {
+                document.querySelectorAll('.shift-mueble[data-proyecto="' + proyectoId + '"]:checked').forEach(cb => {
+                    muebleIds.push(parseInt(cb.value));
+                });
+                if (muebleIds.length === 0) return alert('Selecciona al menos un mueble');
+            }
+
+            const msg = 'Recorrer ' + procesos.join(', ') + (todosMuebles ? ' (todos los muebles)' : ' (' + muebleIds.length + ' muebles)') + ' ' + dias + ' dias habiles. Continuar?';
             if (!confirm(msg)) return;
 
             this.disabled = true;
             this.textContent = 'Aplicando...';
+
+            const body = { dias_habiles: parseInt(dias), procesos: procesos };
+            if (!todosMuebles) body.mueble_ids = muebleIds;
 
             fetch('/tiempos/recorrer/' + proyectoId, {
                 method: 'POST',
@@ -299,7 +342,7 @@ document.addEventListener('DOMContentLoaded', function() {
                     'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').content,
                     'Accept': 'application/json'
                 },
-                body: JSON.stringify({ dias_habiles: parseInt(dias), procesos: procesos })
+                body: JSON.stringify(body)
             })
             .then(r => r.json())
             .then(data => {
