@@ -6,6 +6,7 @@ use App\Models\Proyecto;
 use App\Models\Mueble;
 use App\Models\Personal;
 use App\Models\Tiempo;
+use App\Models\TiempoShift;
 use Carbon\Carbon;
 use Carbon\CarbonPeriod;
 use Illuminate\Http\Request;
@@ -169,6 +170,81 @@ class TiempoController extends Controller
         }
 
         return view('tiempos.dashboard', compact('personal', 'diasHabiles', 'disponibilidad', 'proyectos'));
+    }
+
+    public function recorrerFechas(Request $request, Proyecto $proyecto)
+    {
+        $data = $request->validate([
+            'dias_habiles' => 'required|integer|min:-60|max:60',
+        ]);
+
+        $diasHabiles = (int) $data['dias_habiles'];
+        if ($diasHabiles === 0) {
+            return response()->json(['ok' => false, 'error' => 'Debe ser diferente de 0']);
+        }
+
+        $muebleIds = $proyecto->muebles()->pluck('id');
+        $tiempos = Tiempo::whereIn('mueble_id', $muebleIds)->get();
+
+        if ($tiempos->isEmpty()) {
+            return response()->json(['ok' => false, 'error' => 'No hay tiempos para recorrer']);
+        }
+
+        // Guardar snapshot para poder revertir
+        $snapshot = $tiempos->map(fn($t) => [
+            'id' => $t->id,
+            'fecha' => $t->fecha->format('Y-m-d'),
+        ])->toArray();
+
+        $shift = TiempoShift::create([
+            'proyecto_id' => $proyecto->id,
+            'dias_habiles' => $diasHabiles,
+            'snapshot' => $snapshot,
+            'user_id' => auth()->id(),
+        ]);
+
+        // Recorrer cada fecha X días hábiles
+        foreach ($tiempos as $tiempo) {
+            $tiempo->fecha = $this->moverDiasHabiles($tiempo->fecha, $diasHabiles);
+            $tiempo->save();
+        }
+
+        return response()->json([
+            'ok' => true,
+            'shift_id' => $shift->id,
+            'registros' => $tiempos->count(),
+        ]);
+    }
+
+    public function revertirRecorrido(TiempoShift $shift)
+    {
+        if ($shift->reverted) {
+            return response()->json(['ok' => false, 'error' => 'Ya fue revertido']);
+        }
+
+        foreach ($shift->snapshot as $entry) {
+            Tiempo::where('id', $entry['id'])->update(['fecha' => $entry['fecha']]);
+        }
+
+        $shift->update(['reverted' => true]);
+
+        return response()->json(['ok' => true]);
+    }
+
+    private function moverDiasHabiles(Carbon $fecha, int $dias): Carbon
+    {
+        $resultado = $fecha->copy();
+        $direccion = $dias > 0 ? 1 : -1;
+        $restantes = abs($dias);
+
+        while ($restantes > 0) {
+            $resultado->addDays($direccion);
+            if ($resultado->isWeekday()) {
+                $restantes--;
+            }
+        }
+
+        return $resultado;
     }
 
     public function vistaGeneral(Request $request)

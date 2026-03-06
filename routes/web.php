@@ -30,6 +30,8 @@ Route::middleware('auth')->group(function () {
         Route::post('/tiempos/guardar', [TiempoController::class, 'guardar'])->name('tiempos.guardar');
         Route::post('/tiempos/guardar-rango', [TiempoController::class, 'guardarRango'])->name('tiempos.guardarRango');
         Route::post('/tiempos/borrar-rango', [TiempoController::class, 'borrarRango'])->name('tiempos.borrarRango');
+        Route::post('/tiempos/recorrer/{proyecto}', [TiempoController::class, 'recorrerFechas'])->name('tiempos.recorrer');
+        Route::post('/tiempos/revertir/{shift}', [TiempoController::class, 'revertirRecorrido'])->name('tiempos.revertir');
 
         Route::get('/proyectos/crear', [ProyectoController::class, 'create'])->name('proyectos.create');
         Route::post('/proyectos', [ProyectoController::class, 'store'])->name('proyectos.store');

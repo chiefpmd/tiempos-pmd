@@ -51,6 +51,7 @@
                 <a href="{{ route('captura', $proyecto) }}" class="text-xs text-blue-600 hover:underline">Ir a captura</a>
                 @if($isAdmin)
                     <button class="text-xs text-green-600 hover:underline toggle-add-mueble" data-proyecto="{{ $proyecto->id }}">+ Mueble</button>
+                    <button class="text-xs text-purple-600 hover:underline toggle-shift" data-proyecto="{{ $proyecto->id }}">Recorrer fechas</button>
                 @endif
             </div>
 
@@ -62,6 +63,30 @@
                 <button type="submit" class="bg-blue-600 text-white px-3 py-1 rounded text-sm">Agregar</button>
                 <button type="button" class="text-gray-400 hover:text-gray-600 text-sm toggle-add-mueble" data-proyecto="{{ $proyecto->id }}">Cancelar</button>
             </form>
+            @endif
+
+            @if($isAdmin)
+            <div class="shift-form items-center space-x-2 mb-2 bg-purple-50 p-2 rounded shadow-sm" id="shift-form-{{ $proyecto->id }}" style="display:none">
+                <div class="flex items-center space-x-2">
+                    <label class="text-xs font-medium text-purple-700">Dias habiles a recorrer:</label>
+                    <input type="number" id="shift-dias-{{ $proyecto->id }}" value="1" min="-60" max="60" class="border rounded px-2 py-1 text-sm w-20 text-center">
+                    <span class="text-xs text-gray-500">(positivo = adelante, negativo = atras)</span>
+                    <button type="button" class="bg-purple-600 text-white px-3 py-1 rounded text-sm hover:bg-purple-700 btn-shift" data-proyecto="{{ $proyecto->id }}">Aplicar</button>
+                    <button type="button" class="text-gray-400 hover:text-gray-600 text-sm toggle-shift" data-proyecto="{{ $proyecto->id }}">Cancelar</button>
+                </div>
+                @php $shifts = \App\Models\TiempoShift::where('proyecto_id', $proyecto->id)->where('reverted', false)->latest()->limit(5)->get(); @endphp
+                @if($shifts->isNotEmpty())
+                <div class="mt-2 text-xs text-gray-500">
+                    <span class="font-medium">Historial:</span>
+                    @foreach($shifts as $s)
+                        <span class="inline-flex items-center space-x-1 bg-white border rounded px-2 py-0.5 mr-1">
+                            <span>{{ $s->dias_habiles > 0 ? '+' : '' }}{{ $s->dias_habiles }} dias ({{ $s->created_at->format('d/M H:i') }})</span>
+                            <button class="text-red-500 hover:text-red-700 font-bold btn-revert" data-shift="{{ $s->id }}">&circlearrowleft;</button>
+                        </span>
+                    @endforeach
+                </div>
+                @endif
+            </div>
             @endif
 
             <div class="bg-white rounded-lg shadow overflow-x-auto">
@@ -181,6 +206,79 @@ document.addEventListener('DOMContentLoaded', function() {
         btn.addEventListener('click', function() {
             const form = document.getElementById('add-mueble-' + this.dataset.proyecto);
             if (form) form.classList.toggle('active');
+        });
+    });
+
+    // Toggle shift form
+    document.querySelectorAll('.toggle-shift').forEach(btn => {
+        btn.addEventListener('click', function() {
+            const form = document.getElementById('shift-form-' + this.dataset.proyecto);
+            if (form) form.style.display = form.style.display === 'none' ? 'block' : 'none';
+        });
+    });
+
+    // Apply shift
+    document.querySelectorAll('.btn-shift').forEach(btn => {
+        btn.addEventListener('click', function() {
+            const proyectoId = this.dataset.proyecto;
+            const dias = document.getElementById('shift-dias-' + proyectoId).value;
+            if (!dias || dias == 0) return alert('Ingresa dias habiles a recorrer');
+            if (!confirm('Recorrer todas las fechas del proyecto ' + dias + ' dias habiles. Continuar?')) return;
+
+            this.disabled = true;
+            this.textContent = 'Aplicando...';
+
+            fetch('/tiempos/recorrer/' + proyectoId, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').content,
+                    'Accept': 'application/json'
+                },
+                body: JSON.stringify({ dias_habiles: parseInt(dias) })
+            })
+            .then(r => r.json())
+            .then(data => {
+                if (data.ok) {
+                    alert('Fechas recorridas: ' + data.registros + ' registros actualizados');
+                    location.reload();
+                } else {
+                    alert('Error: ' + data.error);
+                    this.disabled = false;
+                    this.textContent = 'Aplicar';
+                }
+            })
+            .catch(() => {
+                alert('Error al recorrer fechas');
+                this.disabled = false;
+                this.textContent = 'Aplicar';
+            });
+        });
+    });
+
+    // Revert shift
+    document.querySelectorAll('.btn-revert').forEach(btn => {
+        btn.addEventListener('click', function() {
+            if (!confirm('Revertir este recorrido de fechas?')) return;
+
+            fetch('/tiempos/revertir/' + this.dataset.shift, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').content,
+                    'Accept': 'application/json'
+                }
+            })
+            .then(r => r.json())
+            .then(data => {
+                if (data.ok) {
+                    alert('Recorrido revertido');
+                    location.reload();
+                } else {
+                    alert('Error: ' + data.error);
+                }
+            })
+            .catch(() => alert('Error al revertir'));
         });
     });
 
