@@ -33,6 +33,10 @@
         $equipos = $personal->groupBy('equipo');
     @endphp
 
+    @php
+        $semanas = collect($diasHabiles)->groupBy(fn($d) => $d->weekOfYear);
+    @endphp
+
     @foreach($equipos as $equipo => $miembros)
     <div class="mb-4">
         <h2 class="text-sm font-bold mb-1 text-gray-700">{{ $equipo }}</h2>
@@ -40,9 +44,17 @@
             <table class="min-w-full text-xs">
                 <thead class="bg-gray-50">
                     <tr>
+                        <th class="px-2 py-1 sticky left-0 bg-gray-50 w-28"></th>
+                        @foreach($semanas as $numSemana => $diasSemana)
+                            <th class="text-center font-bold text-blue-600 bg-blue-50 border-l-2 border-blue-200 text-xs" colspan="{{ count($diasSemana) }}">
+                                Sem {{ $numSemana }}
+                            </th>
+                        @endforeach
+                    </tr>
+                    <tr>
                         <th class="px-2 py-1 text-left font-medium text-gray-500 sticky left-0 bg-gray-50 w-28">Personal</th>
                         @foreach($diasHabiles as $dia)
-                            <th class="dash-cell text-center font-medium text-gray-400 {{ $dia->isMonday() ? 'border-l-2 border-gray-300' : '' }}">
+                            <th class="dash-cell text-center font-medium text-gray-400 {{ $dia->isMonday() ? 'border-l-2 border-blue-200' : '' }}">
                                 {{ $dia->locale('es')->isoFormat('dd') }}<br>{{ $dia->format('d/M') }}
                             </th>
                         @endforeach
@@ -61,7 +73,7 @@
                                 $info = $disponibilidad[$persona->id][$fechaStr] ?? ['proyectos' => 0, 'nombres' => [], 'horas' => 0];
                                 $class = $info['proyectos'] === 0 ? 'libre' : ($info['proyectos'] === 1 ? 'un-proyecto' : 'alerta');
                             @endphp
-                            <td class="dash-cell text-center {{ $class }} {{ $dia->isMonday() ? 'border-l-2 border-gray-300' : '' }}"
+                            <td class="dash-cell text-center {{ $class }} {{ $dia->isMonday() ? 'border-l-2 border-blue-200' : '' }}"
                                 title="{{ implode(', ', $info['nombres']) }}{{ $info['horas'] > 0 ? ' (' . $info['horas'] . 'h)' : '' }}">
                                 {{ $info['horas'] > 0 ? number_format($info['horas'], 0) : '' }}
                             </td>
