@@ -20,6 +20,8 @@
     .proc-inst { border-left: 3px solid #3b82f6; }
     .add-mueble-form { display: none; }
     .add-mueble-form.active { display: flex; }
+    .festivo { background-color: #f3e8ff; }
+    .festivo-header { background-color: #e9d5ff; color: #7c3aed; }
 </style>
 @endpush
 
@@ -110,7 +112,9 @@
                             <th class="px-2 py-1 text-left font-medium text-gray-500" style="min-width:100px">Proceso</th>
                             <th class="px-2 py-1 text-left font-medium text-gray-500" style="min-width:140px">Equipo</th>
                             @foreach($diasHabiles as $dia)
-                                <th class="gen-cell text-center font-medium text-gray-400 {{ $dia->isMonday() ? 'border-l-2 border-blue-200' : '' }}">
+                                @php $esFestivo = isset($festivos[$dia->format('Y-m-d')]); @endphp
+                                <th class="gen-cell text-center font-medium {{ $esFestivo ? 'festivo-header' : 'text-gray-400' }} {{ $dia->isMonday() ? 'border-l-2 border-blue-200' : '' }}"
+                                    @if($esFestivo) title="{{ $festivos[$dia->format('Y-m-d')] }}" @endif>
                                     {{ $dia->format('d/M') }}
                                 </th>
                             @endforeach
@@ -161,12 +165,13 @@
                                     </td>
                                     @foreach($diasHabiles as $dia)
                                         @php
+                                            $esFestivo = isset($festivos[$dia->format('Y-m-d')]);
                                             $key = $asignado ? "{$mueble->id}_{$proceso}_{$asignado}_{$dia->format('Y-m-d')}" : null;
                                             $val = ($key && isset($tiemposMap[$key])) ? (float)$tiemposMap[$key] : null;
                                             if ($val) $rowTotal += $val;
                                         @endphp
-                                        <td class="gen-cell text-center {{ $dia->isMonday() ? 'border-l-2 border-blue-200' : '' }}"
-                                            @if($val && $persona) style="background-color: {{ $persona->color_hex }}" @endif>
+                                        <td class="gen-cell text-center {{ $esFestivo ? 'festivo' : '' }} {{ $dia->isMonday() ? 'border-l-2 border-blue-200' : '' }}"
+                                            @if($val && $persona && !$esFestivo) style="background-color: {{ $persona->color_hex }}" @endif>
                                             @if($isAdmin)
                                                 <input type="number" step="0.5" min="0" max="24"
                                                     class="time-input {{ $val ? 'text-white font-bold' : '' }}"

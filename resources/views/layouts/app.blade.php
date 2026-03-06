@@ -25,6 +25,9 @@
                     <a href="{{ route('general') }}" class="nav-link {{ request()->routeIs('general') ? 'nav-active' : 'nav-inactive' }}">Vista General</a>
                     <a href="{{ route('proyectos.index') }}" class="nav-link {{ request()->routeIs('proyectos.*') ? 'nav-active' : 'nav-inactive' }}">Proyectos</a>
                     <a href="{{ route('personal.index') }}" class="nav-link {{ request()->routeIs('personal.*') ? 'nav-active' : 'nav-inactive' }}">Personal</a>
+                    @if(auth()->user()->isAdmin())
+                        <a href="{{ route('festivos.index') }}" class="nav-link {{ request()->routeIs('festivos.*') ? 'nav-active' : 'nav-inactive' }}">Festivos</a>
+                    @endif
                 </div>
                 <div class="flex items-center space-x-3">
                     <span class="text-gray-300 text-sm">{{ auth()->user()->name }} ({{ auth()->user()->role }})</span>

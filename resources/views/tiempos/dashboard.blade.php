@@ -7,6 +7,8 @@
     .libre { background-color: #d1fae5; }
     .un-proyecto { background-color: #bfdbfe; }
     .alerta { background-color: #fecaca; font-weight: bold; }
+    .festivo { background-color: #f3e8ff; }
+    .festivo-header { background-color: #e9d5ff; color: #7c3aed; }
 </style>
 @endpush
 
@@ -24,6 +26,7 @@
         <span class="flex items-center"><span class="inline-block w-4 h-4 rounded libre mr-1"></span> Libre</span>
         <span class="flex items-center"><span class="inline-block w-4 h-4 rounded un-proyecto mr-1"></span> 1 Proyecto</span>
         <span class="flex items-center"><span class="inline-block w-4 h-4 rounded alerta mr-1"></span> ALERTA: 2+ Proyectos</span>
+        <span class="flex items-center"><span class="inline-block w-4 h-4 rounded festivo mr-1"></span> Festivo</span>
     </div>
 
     @if($personal->isEmpty())
@@ -54,7 +57,9 @@
                     <tr>
                         <th class="px-2 py-1 text-left font-medium text-gray-500 sticky left-0 bg-gray-50 w-28">Personal</th>
                         @foreach($diasHabiles as $dia)
-                            <th class="dash-cell text-center font-medium text-gray-400 {{ $dia->isMonday() ? 'border-l-2 border-blue-200' : '' }}">
+                            @php $esFestivo = isset($festivos[$dia->format('Y-m-d')]); @endphp
+                            <th class="dash-cell text-center font-medium {{ $esFestivo ? 'festivo-header' : 'text-gray-400' }} {{ $dia->isMonday() ? 'border-l-2 border-blue-200' : '' }}"
+                                @if($esFestivo) title="{{ $festivos[$dia->format('Y-m-d')] }}" @endif>
                                 {{ $dia->locale('es')->isoFormat('dd') }}<br>{{ $dia->format('d/M') }}
                             </th>
                         @endforeach
@@ -70,12 +75,13 @@
                         @foreach($diasHabiles as $dia)
                             @php
                                 $fechaStr = $dia->format('Y-m-d');
+                                $esFestivo = isset($festivos[$fechaStr]);
                                 $info = $disponibilidad[$persona->id][$fechaStr] ?? ['proyectos' => 0, 'nombres' => [], 'horas' => 0];
-                                $class = $info['proyectos'] === 0 ? 'libre' : ($info['proyectos'] === 1 ? 'un-proyecto' : 'alerta');
+                                $class = $esFestivo ? 'festivo' : ($info['proyectos'] === 0 ? 'libre' : ($info['proyectos'] === 1 ? 'un-proyecto' : 'alerta'));
                             @endphp
                             <td class="dash-cell text-center {{ $class }} {{ $dia->isMonday() ? 'border-l-2 border-blue-200' : '' }}"
-                                title="{{ implode(', ', $info['nombres']) }}{{ $info['horas'] > 0 ? ' (' . $info['horas'] . 'h)' : '' }}">
-                                {{ $info['horas'] > 0 ? number_format($info['horas'], 0) : '' }}
+                                title="{{ $esFestivo ? $festivos[$fechaStr] : implode(', ', $info['nombres']) . ($info['horas'] > 0 ? ' (' . $info['horas'] . 'h)' : '') }}">
+                                {{ $esFestivo ? '' : ($info['horas'] > 0 ? number_format($info['horas'], 0) : '') }}
                             </td>
                         @endforeach
                     </tr>

@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use App\Models\DiaFestivo;
 use App\Models\Proyecto;
 use App\Models\Mueble;
 use App\Models\Personal;
@@ -86,11 +87,11 @@ class TiempoController extends Controller
             ->where('proceso', $data['proceso'])
             ->delete();
 
-        // Create entries for each weekday in the range
+        // Create entries for each working day in the range (skip weekends and holidays)
         $periodo = CarbonPeriod::create($data['fecha_inicio'], $data['fecha_fin']);
         $created = 0;
         foreach ($periodo as $dia) {
-            if ($dia->isWeekday()) {
+            if (DiaFestivo::esDiaLaborable($dia)) {
                 Tiempo::create([
                     'mueble_id' => $data['mueble_id'],
                     'proceso' => $data['proceso'],
@@ -135,6 +136,8 @@ class TiempoController extends Controller
         $fechaMin = $proyectos->min('fecha_inicio');
         $fechaMax = $proyectos->max(fn($p) => $p->fecha_fin);
 
+        $festivos = DiaFestivo::whereBetween('fecha', [$fechaMin, $fechaMax])->pluck('nombre', 'fecha')->mapWithKeys(fn($n, $f) => [Carbon::parse($f)->format('Y-m-d') => $n]);
+
         $diasHabiles = [];
         $periodo = CarbonPeriod::create($fechaMin, $fechaMax);
         foreach ($periodo as $dia) {
@@ -169,7 +172,7 @@ class TiempoController extends Controller
             }
         }
 
-        return view('tiempos.dashboard', compact('personal', 'diasHabiles', 'disponibilidad', 'proyectos'));
+        return view('tiempos.dashboard', compact('personal', 'diasHabiles', 'disponibilidad', 'proyectos', 'festivos'));
     }
 
     public function recorrerFechas(Request $request, Proyecto $proyecto)
@@ -239,7 +242,7 @@ class TiempoController extends Controller
 
         while ($restantes > 0) {
             $resultado->addDays($direccion);
-            if ($resultado->isWeekday()) {
+            if (DiaFestivo::esDiaLaborable($resultado)) {
                 $restantes--;
             }
         }
@@ -269,6 +272,8 @@ class TiempoController extends Controller
         $fechaMin = $proyectos->min('fecha_inicio');
         $fechaMax = $proyectos->max(fn($p) => $p->fecha_fin);
 
+        $festivos = DiaFestivo::whereBetween('fecha', [$fechaMin, $fechaMax])->pluck('nombre', 'fecha')->mapWithKeys(fn($n, $f) => [Carbon::parse($f)->format('Y-m-d') => $n]);
+
         $diasHabiles = [];
         $periodo = CarbonPeriod::create($fechaMin, $fechaMax);
         foreach ($periodo as $dia) {
@@ -291,6 +296,6 @@ class TiempoController extends Controller
         $personal = Personal::where('activo', true)->get()->keyBy('id');
         $procesos = ['Carpintería', 'Barniz', 'Instalación'];
 
-        return view('tiempos.general', compact('proyectos', 'diasHabiles', 'tiemposMap', 'personal', 'procesos'));
+        return view('tiempos.general', compact('proyectos', 'diasHabiles', 'tiemposMap', 'personal', 'procesos', 'festivos'));
     }
 }
