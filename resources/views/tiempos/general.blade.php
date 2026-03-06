@@ -22,6 +22,11 @@
     .add-mueble-form.active { display: flex; }
     .festivo { background-color: #f3e8ff; }
     .festivo-header { background-color: #e9d5ff; color: #7c3aed; }
+    .mat-pedido { box-shadow: inset 2px 0 0 0 #ef4444; }
+    .mat-entrega { box-shadow: inset -2px 0 0 0 #dc2626; }
+    .mat-ambos { box-shadow: inset 2px 0 0 0 #ef4444, inset -2px 0 0 0 #dc2626; }
+    .mat-pedido-header { border-left: 3px solid #ef4444 !important; }
+    .mat-entrega-header { border-right: 3px solid #dc2626 !important; }
 </style>
 @endpush
 
@@ -54,6 +59,7 @@
                 @if($isAdmin)
                     <button class="text-xs text-green-600 hover:underline toggle-add-mueble" data-proyecto="{{ $proyecto->id }}">+ Mueble</button>
                     <button class="text-xs text-purple-600 hover:underline toggle-shift" data-proyecto="{{ $proyecto->id }}">Recorrer fechas</button>
+                    <button class="text-xs text-red-600 hover:underline toggle-materiales" data-proyecto="{{ $proyecto->id }}">Materiales</button>
                 @endif
             </div>
 
@@ -89,12 +95,36 @@
                 </div>
                 @endif
             </div>
+
+            @php
+                $matPedido = $proyecto->materiales->where('tipo', 'pedido')->first();
+                $matEntrega = $proyecto->materiales->where('tipo', 'entrega')->first();
+            @endphp
+            <div class="materiales-form mb-2 bg-red-50 p-2 rounded shadow-sm" id="materiales-form-{{ $proyecto->id }}" style="display:none">
+                <div class="flex items-center space-x-4">
+                    <div class="flex items-center space-x-2">
+                        <label class="text-xs font-medium text-red-700">Pedido material:</label>
+                        <input type="date" class="border rounded px-2 py-1 text-sm mat-date" data-proyecto="{{ $proyecto->id }}" data-tipo="pedido" value="{{ $matPedido?->fecha?->format('Y-m-d') }}">
+                    </div>
+                    <div class="flex items-center space-x-2">
+                        <label class="text-xs font-medium text-red-700">Entrega material:</label>
+                        <input type="date" class="border rounded px-2 py-1 text-sm mat-date" data-proyecto="{{ $proyecto->id }}" data-tipo="entrega" value="{{ $matEntrega?->fecha?->format('Y-m-d') }}">
+                    </div>
+                    <button type="button" class="text-gray-400 hover:text-gray-600 text-sm toggle-materiales" data-proyecto="{{ $proyecto->id }}">Cerrar</button>
+                </div>
+                <div class="mt-1 text-xs text-gray-400">
+                    <span class="inline-block w-3 border-l-2 border-red-500 mr-1">&nbsp;</span> Pedido
+                    <span class="inline-block w-3 border-r-2 border-red-700 mr-1 ml-3">&nbsp;</span> Entrega
+                </div>
+            </div>
             @endif
 
             <div class="bg-white rounded-lg shadow overflow-x-auto">
                 <table class="min-w-full text-xs">
                     @php
                         $semanas = collect($diasHabiles)->groupBy(fn($d) => $d->weekOfYear);
+                        $fechaPedido = $matPedido?->fecha?->format('Y-m-d');
+                        $fechaEntrega = $matEntrega?->fecha?->format('Y-m-d');
                     @endphp
                     <thead class="bg-gray-50">
                         <tr>
@@ -112,9 +142,19 @@
                             <th class="px-2 py-1 text-left font-medium text-gray-500" style="min-width:100px">Proceso</th>
                             <th class="px-2 py-1 text-left font-medium text-gray-500" style="min-width:140px">Equipo</th>
                             @foreach($diasHabiles as $dia)
-                                @php $esFestivo = isset($festivos[$dia->format('Y-m-d')]); @endphp
-                                <th class="gen-cell text-center font-medium {{ $esFestivo ? 'festivo-header' : 'text-gray-400' }} {{ $dia->isMonday() ? 'border-l-2 border-blue-200' : '' }}"
-                                    @if($esFestivo) title="{{ $festivos[$dia->format('Y-m-d')] }}" @endif>
+                                @php
+                                    $esFestivo = isset($festivos[$dia->format('Y-m-d')]);
+                                    $diaStr = $dia->format('Y-m-d');
+                                    $matHeaderClass = '';
+                                    if ($diaStr === $fechaPedido) $matHeaderClass .= ' mat-pedido-header';
+                                    if ($diaStr === $fechaEntrega) $matHeaderClass .= ' mat-entrega-header';
+                                @endphp
+                                <th class="gen-cell text-center font-medium {{ $esFestivo ? 'festivo-header' : 'text-gray-400' }} {{ $dia->isMonday() ? 'border-l-2 border-blue-200' : '' }}{{ $matHeaderClass }}"
+                                    @if($esFestivo) title="{{ $festivos[$diaStr] }}"
+                                    @elseif($diaStr === $fechaPedido && $diaStr === $fechaEntrega) title="Pedido + Entrega material"
+                                    @elseif($diaStr === $fechaPedido) title="Pedido material"
+                                    @elseif($diaStr === $fechaEntrega) title="Entrega material"
+                                    @endif>
                                     {{ $dia->format('d/M') }}
                                 </th>
                             @endforeach
@@ -165,12 +205,19 @@
                                     </td>
                                     @foreach($diasHabiles as $dia)
                                         @php
-                                            $esFestivo = isset($festivos[$dia->format('Y-m-d')]);
-                                            $key = $asignado ? "{$mueble->id}_{$proceso}_{$asignado}_{$dia->format('Y-m-d')}" : null;
+                                            $diaStr = $dia->format('Y-m-d');
+                                            $esFestivo = isset($festivos[$diaStr]);
+                                            $key = $asignado ? "{$mueble->id}_{$proceso}_{$asignado}_{$diaStr}" : null;
                                             $val = ($key && isset($tiemposMap[$key])) ? (float)$tiemposMap[$key] : null;
                                             if ($val) $rowTotal += $val;
+                                            $matClass = '';
+                                            $esPedido = $diaStr === $fechaPedido;
+                                            $esEntrega = $diaStr === $fechaEntrega;
+                                            if ($esPedido && $esEntrega) $matClass = 'mat-ambos';
+                                            elseif ($esPedido) $matClass = 'mat-pedido';
+                                            elseif ($esEntrega) $matClass = 'mat-entrega';
                                         @endphp
-                                        <td class="gen-cell text-center {{ $esFestivo ? 'festivo' : '' }} {{ $dia->isMonday() ? 'border-l-2 border-blue-200' : '' }}"
+                                        <td class="gen-cell text-center {{ $esFestivo ? 'festivo' : '' }} {{ $matClass }} {{ $dia->isMonday() ? 'border-l-2 border-blue-200' : '' }}"
                                             @if($val && $persona && !$esFestivo) style="background-color: {{ $persona->color_hex }}" @endif>
                                             @if($isAdmin)
                                                 <input type="number" step="0.5" min="0" max="24"
@@ -284,6 +331,35 @@ document.addEventListener('DOMContentLoaded', function() {
                 }
             })
             .catch(() => alert('Error al revertir'));
+        });
+    });
+
+    // Toggle materiales form
+    document.querySelectorAll('.toggle-materiales').forEach(btn => {
+        btn.addEventListener('click', function() {
+            const form = document.getElementById('materiales-form-' + this.dataset.proyecto);
+            if (form) form.style.display = form.style.display === 'none' ? 'block' : 'none';
+        });
+    });
+
+    // Save material dates
+    document.querySelectorAll('.mat-date').forEach(input => {
+        input.addEventListener('change', function() {
+            const el = this;
+            fetch('/proyecto/' + el.dataset.proyecto + '/materiales', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').content,
+                    'Accept': 'application/json'
+                },
+                body: JSON.stringify({ tipo: el.dataset.tipo, fecha: el.value || null })
+            })
+            .then(r => r.json())
+            .then(data => {
+                if (data.ok) location.reload();
+            })
+            .catch(() => alert('Error al guardar fecha de material'));
         });
     });
 

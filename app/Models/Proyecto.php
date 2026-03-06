@@ -15,6 +15,11 @@ class Proyecto extends Model
         return $this->hasMany(Mueble::class, 'proyecto_id');
     }
 
+    public function materiales()
+    {
+        return $this->hasMany(ProyectoMaterial::class, 'proyecto_id');
+    }
+
     public function getFechaFinAttribute(): \Carbon\Carbon
     {
         return $this->fecha_inicio->copy()->addWeeks($this->semanas)->subDay();

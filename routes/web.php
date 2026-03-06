@@ -8,6 +8,7 @@ use App\Http\Controllers\MuebleController;
 use App\Http\Controllers\TiempoController;
 use App\Http\Controllers\ExportController;
 use App\Http\Controllers\DiaFestivoController;
+use App\Http\Controllers\ProyectoMaterialController;
 
 Route::get('/', fn() => redirect('/login'));
 
@@ -48,6 +49,8 @@ Route::middleware('auth')->group(function () {
 
         Route::post('/proyecto/{proyecto}/muebles', [MuebleController::class, 'store'])->name('muebles.store');
         Route::delete('/muebles/{mueble}', [MuebleController::class, 'destroy'])->name('muebles.destroy');
+
+        Route::post('/proyecto/{proyecto}/materiales', [ProyectoMaterialController::class, 'guardar'])->name('materiales.guardar');
 
         Route::get('/festivos', [DiaFestivoController::class, 'index'])->name('festivos.index');
         Route::post('/festivos', [DiaFestivoController::class, 'store'])->name('festivos.store');
