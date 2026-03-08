@@ -18,27 +18,44 @@ class NominaController extends Controller
     {
         $anio = $request->integer('anio', now()->year);
         $semana = $request->integer('semana', now()->weekOfYear);
+        $semanaFin = $request->integer('semana_fin', $semana);
+        $personalFiltro = $request->integer('personal_id', 0);
+
+        // Ensure semana_fin >= semana
+        if ($semanaFin < $semana) $semanaFin = $semana;
 
         $inicioSemana = Carbon::now()->setISODate($anio, $semana, 1); // Monday
-        $finSemana = $inicioSemana->copy()->addDays(4); // Friday
+        $finSemana = Carbon::now()->setISODate($anio, $semanaFin, 5); // Friday of last week
 
         $dias = [];
         for ($d = $inicioSemana->copy(); $d->lte($finSemana); $d->addDay()) {
-            $dias[] = $d->copy();
+            if ($d->isWeekday()) {
+                $dias[] = $d->copy();
+            }
         }
 
-        $empleados = Personal::where('activo', true)->orderBy('equipo')->orderBy('nombre')->get();
+        $todosEmpleados = Personal::where('activo', true)->orderBy('equipo')->orderBy('nombre')->get();
 
-        $registros = NominaDiaria::whereBetween('fecha', [$inicioSemana->format('Y-m-d'), $finSemana->format('Y-m-d')])
-            ->get()
+        if ($personalFiltro) {
+            $empleados = $todosEmpleados->where('id', $personalFiltro);
+        } else {
+            $empleados = $todosEmpleados;
+        }
+
+        $registrosQuery = NominaDiaria::whereBetween('fecha', [$inicioSemana->format('Y-m-d'), $finSemana->format('Y-m-d')]);
+        if ($personalFiltro) {
+            $registrosQuery->where('personal_id', $personalFiltro);
+        }
+        $registros = $registrosQuery->get()
             ->keyBy(fn($r) => $r->personal_id . '_' . $r->fecha->format('Y-m-d'));
 
         $proyectos = Proyecto::where('status', 'activo')->orderBy('nombre')->get();
         $categorias = CategoriaNomina::where('activa', true)->orderBy('nombre')->get();
 
         return view('nomina.semanal', compact(
-            'anio', 'semana', 'dias', 'empleados', 'registros',
-            'proyectos', 'categorias', 'inicioSemana', 'finSemana'
+            'anio', 'semana', 'semanaFin', 'dias', 'empleados', 'registros',
+            'proyectos', 'categorias', 'inicioSemana', 'finSemana',
+            'todosEmpleados', 'personalFiltro'
         ));
     }
 

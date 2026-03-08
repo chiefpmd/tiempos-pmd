@@ -6,13 +6,23 @@
     <h1 class="text-xl font-bold">Nómina Semanal</h1>
 
     <div class="flex items-center gap-3">
-        <form method="GET" action="{{ route('nomina.semanal') }}" class="flex items-center gap-2">
+        <form method="GET" action="{{ route('nomina.semanal') }}" class="flex items-center gap-2 flex-wrap">
             <label class="text-sm text-gray-600">Semana:</label>
             <input type="number" name="semana" value="{{ $semana }}" min="1" max="53"
+                   class="border rounded px-2 py-1 text-sm w-16">
+            <label class="text-sm text-gray-600">a:</label>
+            <input type="number" name="semana_fin" value="{{ $semanaFin }}" min="1" max="53"
                    class="border rounded px-2 py-1 text-sm w-16">
             <label class="text-sm text-gray-600">Año:</label>
             <input type="number" name="anio" value="{{ $anio }}" min="2020" max="2030"
                    class="border rounded px-2 py-1 text-sm w-20">
+            <label class="text-sm text-gray-600">Personal:</label>
+            <select name="personal_id" class="border rounded px-2 py-1 text-sm w-48">
+                <option value="">-- Todos --</option>
+                @foreach($todosEmpleados as $emp)
+                    <option value="{{ $emp->id }}" {{ $personalFiltro == $emp->id ? 'selected' : '' }}>{{ $emp->nombre }}</option>
+                @endforeach
+            </select>
             <button type="submit" class="bg-gray-600 text-white px-3 py-1 rounded text-sm hover:bg-gray-700">Ir</button>
         </form>
 
@@ -26,7 +36,14 @@
 </div>
 
 <p class="text-sm text-gray-500 mb-4">
-    Semana {{ $semana }} &mdash; {{ $inicioSemana->format('d/m/Y') }} al {{ $finSemana->format('d/m/Y') }}
+    @if($semana === $semanaFin)
+        Semana {{ $semana }} &mdash; {{ $inicioSemana->format('d/m/Y') }} al {{ $finSemana->format('d/m/Y') }}
+    @else
+        Semanas {{ $semana }} a {{ $semanaFin }} &mdash; {{ $inicioSemana->format('d/m/Y') }} al {{ $finSemana->format('d/m/Y') }}
+    @endif
+    @if($personalFiltro)
+        &mdash; <span class="font-semibold text-blue-600">{{ $todosEmpleados->find($personalFiltro)?->nombre }}</span>
+    @endif
 </p>
 
 <div class="bg-white rounded-lg shadow overflow-x-auto">
@@ -47,20 +64,26 @@
                     $salarioDiario = $emp->salario_diario;
                     $salarioHe = $emp->salario_he;
                     $diasNombre = ['Lun','Mar','Mié','Jue','Vie'];
+                    $diasPorSemana = collect($dias)->groupBy(fn($d) => $d->weekOfYear);
+                    $totalSemanas = $diasPorSemana->count();
+                    $totalDias = count($dias);
                 @endphp
                 @foreach($dias as $idx => $dia)
                     @php
                         $key = $emp->id . '_' . $dia->format('Y-m-d');
                         $reg = $registros[$key] ?? null;
+                        $dayOfWeek = $dia->dayOfWeekIso - 1; // 0=Mon, 4=Fri
+                        $isFirstDayOfWeek = $dayOfWeek === 0;
+                        $currentWeek = $dia->weekOfYear;
                     @endphp
-                    <tr class="{{ $idx === 0 ? 'border-t-2 border-gray-300' : '' }} hover:bg-gray-50"
+                    <tr class="{{ $idx === 0 ? 'border-t-2 border-gray-300' : '' }} {{ $isFirstDayOfWeek && $idx > 0 ? 'border-t border-blue-200' : '' }} hover:bg-gray-50"
                         data-personal-id="{{ $emp->id }}"
                         data-fecha="{{ $dia->format('Y-m-d') }}"
                         data-salario-diario="{{ $salarioDiario }}"
                         data-salario-he="{{ $salarioHe }}">
 
                         @if($idx === 0)
-                        <td class="px-3 py-1 align-top" rowspan="5">
+                        <td class="px-3 py-1 align-top" rowspan="{{ $totalDias }}">
                             <div class="font-semibold text-gray-800">{{ $emp->nombre }}</div>
                             @if($emp->clave_empleado)
                                 <div class="text-gray-400 text-[10px]">{{ $emp->clave_empleado }}</div>
@@ -74,7 +97,10 @@
                         @endif
 
                         <td class="px-3 py-1 text-gray-500">
-                            {{ $diasNombre[$idx] }} {{ $dia->format('d/m') }}
+                            @if($isFirstDayOfWeek && $totalSemanas > 1)
+                                <span class="text-blue-600 font-semibold text-[9px]">S{{ $currentWeek }}</span>
+                            @endif
+                            {{ $diasNombre[$dayOfWeek] }} {{ $dia->format('d/m') }}
                         </td>
 
                         <td class="px-3 py-1">
@@ -206,21 +232,32 @@ function prellenar() {
     btn.disabled = true;
     btn.textContent = 'Pre-llenando...';
 
-    fetch('{{ route("nomina.prellenar") }}', {
-        method: 'POST',
-        headers: {
-            'Content-Type': 'application/json',
-            'X-CSRF-TOKEN': csrfToken,
-            'Accept': 'application/json',
-        },
-        body: JSON.stringify({
-            semana: {{ $semana }},
-            anio: {{ $anio }},
-        }),
-    })
-    .then(r => r.json())
-    .then(data => {
-        alert(data.message);
+    // Pre-fill each week in the range
+    const semanaInicio = {{ $semana }};
+    const semanaFin = {{ $semanaFin }};
+    const anio = {{ $anio }};
+
+    async function prellenarSemanas() {
+        let totalCount = 0;
+        for (let s = semanaInicio; s <= semanaFin; s++) {
+            const res = await fetch('{{ route("nomina.prellenar") }}', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-CSRF-TOKEN': csrfToken,
+                    'Accept': 'application/json',
+                },
+                body: JSON.stringify({ semana: s, anio: anio }),
+            });
+            const data = await res.json();
+            totalCount += data.count || 0;
+        }
+        return totalCount;
+    }
+
+    prellenarSemanas()
+    .then(count => {
+        alert('Se pre-llenaron ' + count + ' registros');
         window.location.reload();
     })
     .catch(err => {
