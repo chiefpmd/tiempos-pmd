@@ -266,30 +266,37 @@ class TiempoController extends Controller
             ->with('proyecto')
             ->get();
 
-        // Build per-person per-day project assignments (from both sources)
-        $personDayProject = []; // personId_date => [projectNames]
+        // Build per-person per-day: project => personas count (from tiempos horas)
+        // personId_date => [ projectName => personas ]
+        $personDayProject = [];
         foreach ($allTiempos as $t) {
             $key = $t->personal_id . '_' . $t->fecha->format('Y-m-d');
-            $personDayProject[$key][] = $t->mueble->proyecto->nombre;
+            $projName = $t->mueble->proyecto->nombre;
+            // Use max horas per person per project per day (horas = team size)
+            $personDayProject[$key][$projName] = max(
+                $personDayProject[$key][$projName] ?? 0,
+                $t->horas
+            );
         }
         foreach ($allNomina as $n) {
             $key = $n->personal_id . '_' . $n->fecha->format('Y-m-d');
             if (!isset($personDayProject[$key]) && $n->proyecto) {
-                $personDayProject[$key][] = $n->proyecto->nombre;
+                $personDayProject[$key][$n->proyecto->nombre] = 1; // nomina = 1 person
             }
         }
 
         // Group days by week
         $semanas = collect($diasHabiles)->groupBy(fn($d) => $d->weekOfYear);
 
-        // Project capacity: unique people per project per week
-        $proyectoCapacidad = []; // proyectoNombre => [semana => count]
+        // Project capacity: total personas per project per week
+        $proyectoCapacidad = []; // proyectoNombre => [semana => totalPersonas]
         // Department capacity: assigned vs total per dept per week
         $deptCapacidad = []; // equipo => [semana => ['asignados' => count, 'total' => count]]
-        $personEquipo = $todosActivos->pluck('equipo', 'id');
 
         foreach ($semanas as $numSemana => $diasSemana) {
-            $personasEnProyecto = []; // proyectoNombre => [personIds]
+            // For project capacity: per leader, take their max personas for the week
+            // Then sum across leaders
+            $leaderMaxPerProject = []; // projName => [personalId => maxPersonas]
             $personasAsignadasPorDept = []; // equipo => [personIds]
 
             foreach ($diasSemana as $dia) {
@@ -297,10 +304,12 @@ class TiempoController extends Controller
                 foreach ($todosActivos as $p) {
                     $key = $p->id . '_' . $fechaStr;
                     $proyectos_dia = $personDayProject[$key] ?? [];
-                    $proyectos_dia = array_unique($proyectos_dia);
 
-                    foreach ($proyectos_dia as $projNombre) {
-                        $personasEnProyecto[$projNombre][$p->id] = true;
+                    foreach ($proyectos_dia as $projNombre => $personas) {
+                        $leaderMaxPerProject[$projNombre][$p->id] = max(
+                            $leaderMaxPerProject[$projNombre][$p->id] ?? 0,
+                            $personas
+                        );
                     }
 
                     if (!empty($proyectos_dia)) {
@@ -309,8 +318,9 @@ class TiempoController extends Controller
                 }
             }
 
-            foreach ($personasEnProyecto as $projNombre => $ids) {
-                $proyectoCapacidad[$projNombre][$numSemana] = count($ids);
+            // Sum personas across all leaders for each project
+            foreach ($leaderMaxPerProject as $projNombre => $leaders) {
+                $proyectoCapacidad[$projNombre][$numSemana] = (int) array_sum($leaders);
             }
 
             foreach ($deptTotals as $equipo => $total) {
