@@ -16,10 +16,17 @@
             @error('nombre') <span class="text-red-500 text-xs">{{ $message }}</span> @enderror
         </div>
 
-        <div>
-            <label class="block text-sm font-medium text-gray-700 mb-1">Cliente</label>
-            <input type="text" name="cliente" value="{{ old('cliente', $proyecto->cliente) }}" required
-                class="w-full border border-gray-300 rounded px-3 py-2 text-sm">
+        <div class="grid grid-cols-3 gap-4">
+            <div class="col-span-2">
+                <label class="block text-sm font-medium text-gray-700 mb-1">Cliente</label>
+                <input type="text" name="cliente" value="{{ old('cliente', $proyecto->cliente) }}" required
+                    class="w-full border border-gray-300 rounded px-3 py-2 text-sm">
+            </div>
+            <div>
+                <label class="block text-sm font-medium text-gray-700 mb-1">Abreviacion</label>
+                <input type="text" name="abreviacion" value="{{ old('abreviacion', $proyecto->abreviacion) }}" maxlength="10" placeholder="ej: JC1"
+                    class="w-full border border-gray-300 rounded px-3 py-2 text-sm">
+            </div>
         </div>
 
         <div class="grid grid-cols-2 gap-4">

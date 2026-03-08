@@ -7,7 +7,7 @@ use Illuminate\Database\Eloquent\Model;
 class Proyecto extends Model
 {
     protected $table = 'proyectos';
-    protected $fillable = ['nombre', 'cliente', 'fecha_inicio', 'semanas', 'status'];
+    protected $fillable = ['nombre', 'abreviacion', 'cliente', 'fecha_inicio', 'semanas', 'status'];
     protected $casts = ['fecha_inicio' => 'date'];
 
     public function muebles()

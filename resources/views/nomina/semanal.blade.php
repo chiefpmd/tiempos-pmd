@@ -1,0 +1,234 @@
+@extends('layouts.app')
+@section('title', 'Nómina Semanal')
+
+@section('content')
+<div class="flex flex-wrap items-center justify-between gap-4 mb-4">
+    <h1 class="text-xl font-bold">Nómina Semanal</h1>
+
+    <div class="flex items-center gap-3">
+        <form method="GET" action="{{ route('nomina.semanal') }}" class="flex items-center gap-2">
+            <label class="text-sm text-gray-600">Semana:</label>
+            <input type="number" name="semana" value="{{ $semana }}" min="1" max="53"
+                   class="border rounded px-2 py-1 text-sm w-16">
+            <label class="text-sm text-gray-600">Año:</label>
+            <input type="number" name="anio" value="{{ $anio }}" min="2020" max="2030"
+                   class="border rounded px-2 py-1 text-sm w-20">
+            <button type="submit" class="bg-gray-600 text-white px-3 py-1 rounded text-sm hover:bg-gray-700">Ir</button>
+        </form>
+
+        @if(auth()->user()->isAdmin())
+        <button onclick="prellenar()" id="btn-prellenar"
+                class="bg-indigo-600 text-white px-3 py-1 rounded text-sm hover:bg-indigo-700">
+            Pre-llenar desde Tiempos
+        </button>
+        @endif
+    </div>
+</div>
+
+<p class="text-sm text-gray-500 mb-4">
+    Semana {{ $semana }} &mdash; {{ $inicioSemana->format('d/m/Y') }} al {{ $finSemana->format('d/m/Y') }}
+</p>
+
+<div class="bg-white rounded-lg shadow overflow-x-auto">
+    <table class="min-w-full text-xs">
+        <thead class="bg-gray-50">
+            <tr>
+                <th class="px-3 py-2 text-left font-medium text-gray-500 min-w-[180px]">Empleado</th>
+                <th class="px-3 py-2 text-left font-medium text-gray-500 w-24">Día</th>
+                <th class="px-3 py-2 text-left font-medium text-gray-500 min-w-[200px]">Proyecto / Categoría</th>
+                <th class="px-3 py-2 text-left font-medium text-gray-500 w-16">HE</th>
+                <th class="px-3 py-2 text-left font-medium text-gray-500 min-w-[160px]">Proyecto HE</th>
+                <th class="px-3 py-2 text-right font-medium text-gray-500 w-24">Costo</th>
+            </tr>
+        </thead>
+        <tbody class="divide-y divide-gray-100">
+            @foreach($empleados as $emp)
+                @php
+                    $salarioDiario = $emp->salario_diario;
+                    $salarioHe = $emp->salario_he;
+                    $diasNombre = ['Lun','Mar','Mié','Jue','Vie'];
+                @endphp
+                @foreach($dias as $idx => $dia)
+                    @php
+                        $key = $emp->id . '_' . $dia->format('Y-m-d');
+                        $reg = $registros[$key] ?? null;
+                    @endphp
+                    <tr class="{{ $idx === 0 ? 'border-t-2 border-gray-300' : '' }} hover:bg-gray-50"
+                        data-personal-id="{{ $emp->id }}"
+                        data-fecha="{{ $dia->format('Y-m-d') }}"
+                        data-salario-diario="{{ $salarioDiario }}"
+                        data-salario-he="{{ $salarioHe }}">
+
+                        @if($idx === 0)
+                        <td class="px-3 py-1 align-top" rowspan="5">
+                            <div class="font-semibold text-gray-800">{{ $emp->nombre }}</div>
+                            @if($emp->clave_empleado)
+                                <div class="text-gray-400 text-[10px]">{{ $emp->clave_empleado }}</div>
+                            @endif
+                            @if($salarioDiario > 0)
+                                <div class="text-gray-400 text-[10px]">${{ number_format($salarioDiario, 2) }}/día</div>
+                            @else
+                                <div class="text-amber-500 text-[10px]">Sin sueldo</div>
+                            @endif
+                        </td>
+                        @endif
+
+                        <td class="px-3 py-1 text-gray-500">
+                            {{ $diasNombre[$idx] }} {{ $dia->format('d/m') }}
+                        </td>
+
+                        <td class="px-3 py-1">
+                            <select class="asignacion-select border rounded px-1 py-0.5 text-xs w-full"
+                                    onchange="guardarCelda(this)" {{ auth()->user()->isAdmin() ? '' : 'disabled' }}>
+                                <option value="">-- Sin asignar --</option>
+                                <optgroup label="Proyectos">
+                                    @foreach($proyectos as $p)
+                                        <option value="proyecto_{{ $p->id }}"
+                                            {{ $reg && $reg->proyecto_id == $p->id ? 'selected' : '' }}>
+                                            {{ $p->nombre }}
+                                        </option>
+                                    @endforeach
+                                </optgroup>
+                                <optgroup label="No Productivo">
+                                    @foreach($categorias as $cat)
+                                        <option value="categoria_{{ $cat->id }}"
+                                            {{ $reg && $reg->categoria_id == $cat->id ? 'selected' : '' }}>
+                                            {{ $cat->nombre }}
+                                        </option>
+                                    @endforeach
+                                </optgroup>
+                            </select>
+                        </td>
+
+                        <td class="px-3 py-1">
+                            <input type="number" step="0.5" min="0" max="24"
+                                   class="he-input border rounded px-1 py-0.5 text-xs w-14"
+                                   value="{{ $reg ? floatval($reg->horas_extra) : 0 }}"
+                                   onchange="guardarCelda(this)" {{ auth()->user()->isAdmin() ? '' : 'disabled' }}>
+                        </td>
+
+                        <td class="px-3 py-1">
+                            <select class="he-proyecto-select border rounded px-1 py-0.5 text-xs w-full"
+                                    onchange="guardarCelda(this)" {{ auth()->user()->isAdmin() ? '' : 'disabled' }}>
+                                <option value="">-- Mismo --</option>
+                                @foreach($proyectos as $p)
+                                    <option value="{{ $p->id }}"
+                                        {{ $reg && $reg->proyecto_he_id == $p->id ? 'selected' : '' }}>
+                                        {{ $p->nombre }}
+                                    </option>
+                                @endforeach
+                            </select>
+                        </td>
+
+                        <td class="px-3 py-1 text-right costo-cell font-mono text-gray-700">
+                            @if($reg && $reg->costo_total > 0)
+                                ${{ number_format($reg->costo_total, 2) }}
+                            @else
+                                -
+                            @endif
+                        </td>
+                    </tr>
+                @endforeach
+            @endforeach
+        </tbody>
+    </table>
+</div>
+
+@if($empleados->isEmpty())
+    <p class="text-gray-400 text-sm mt-4">No hay empleados activos.</p>
+@endif
+
+@push('scripts')
+<script>
+const csrfToken = document.querySelector('meta[name="csrf-token"]').content;
+
+function guardarCelda(el) {
+    const row = el.closest('tr');
+    const personalId = row.dataset.personalId;
+    const fecha = row.dataset.fecha;
+    const salarioDiario = parseFloat(row.dataset.salarioDiario) || 0;
+    const salarioHe = parseFloat(row.dataset.salarioHe) || 0;
+
+    const asignacionSelect = row.querySelector('.asignacion-select');
+    const heInput = row.querySelector('.he-input');
+    const heProyectoSelect = row.querySelector('.he-proyecto-select');
+    const costoCell = row.querySelector('.costo-cell');
+
+    const asignacionVal = asignacionSelect.value;
+    let asignacionTipo = null;
+    let asignacionId = null;
+
+    if (asignacionVal) {
+        const parts = asignacionVal.split('_');
+        asignacionTipo = parts[0];
+        asignacionId = parts.slice(1).join('_');
+    }
+
+    const horasExtra = parseFloat(heInput.value) || 0;
+    const projectHeId = heProyectoSelect.value || null;
+
+    // Optimistic cost update
+    let costo = asignacionVal ? salarioDiario : 0;
+    costo += horasExtra * salarioHe;
+    costoCell.textContent = costo > 0 ? '$' + costo.toFixed(2) : '-';
+
+    fetch('{{ route("nomina.guardar") }}', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+            'X-CSRF-TOKEN': csrfToken,
+            'Accept': 'application/json',
+        },
+        body: JSON.stringify({
+            personal_id: personalId,
+            fecha: fecha,
+            asignacion_tipo: asignacionTipo,
+            asignacion_id: asignacionId,
+            horas_extra: horasExtra,
+            proyecto_he_id: projectHeId,
+        }),
+    })
+    .then(r => r.json())
+    .then(data => {
+        const ct = parseFloat(data.costo_total);
+        costoCell.textContent = ct > 0 ? '$' + ct.toFixed(2) : '-';
+        row.style.backgroundColor = '#f0fdf4';
+        setTimeout(() => row.style.backgroundColor = '', 500);
+    })
+    .catch(err => {
+        costoCell.textContent = 'ERROR';
+        console.error(err);
+    });
+}
+
+function prellenar() {
+    const btn = document.getElementById('btn-prellenar');
+    btn.disabled = true;
+    btn.textContent = 'Pre-llenando...';
+
+    fetch('{{ route("nomina.prellenar") }}', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+            'X-CSRF-TOKEN': csrfToken,
+            'Accept': 'application/json',
+        },
+        body: JSON.stringify({
+            semana: {{ $semana }},
+            anio: {{ $anio }},
+        }),
+    })
+    .then(r => r.json())
+    .then(data => {
+        alert(data.message);
+        window.location.reload();
+    })
+    .catch(err => {
+        alert('Error al pre-llenar');
+        btn.disabled = false;
+        btn.textContent = 'Pre-llenar desde Tiempos';
+    });
+}
+</script>
+@endpush
+@endsection

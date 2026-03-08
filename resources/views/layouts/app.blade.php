@@ -11,7 +11,7 @@
         .grid-cell input { width: 50px; text-align: center; }
         .nav-link { @apply px-3 py-2 rounded-md text-sm font-medium; }
         .nav-active { @apply bg-gray-900 text-white; }
-        .nav-inactive { @apply text-gray-300 hover:bg-gray-700 hover:text-white; }
+        .nav-inactive { @apply text-gray-100 hover:bg-gray-700 hover:text-white; }
     </style>
     @stack('styles')
 </head>
@@ -21,12 +21,16 @@
             <div class="flex items-center justify-between h-14">
                 <div class="flex items-center space-x-4">
                     <span class="text-white font-bold text-lg">PMD Tiempos</span>
-                    <a href="{{ route('dashboard') }}" class="nav-link {{ request()->routeIs('dashboard') ? 'nav-active' : 'nav-inactive' }}">Dashboard</a>
-                    <a href="{{ route('general') }}" class="nav-link {{ request()->routeIs('general') ? 'nav-active' : 'nav-inactive' }}">Vista General</a>
-                    <a href="{{ route('proyectos.index') }}" class="nav-link {{ request()->routeIs('proyectos.*') ? 'nav-active' : 'nav-inactive' }}">Proyectos</a>
-                    <a href="{{ route('personal.index') }}" class="nav-link {{ request()->routeIs('personal.*') ? 'nav-active' : 'nav-inactive' }}">Personal</a>
+                    <a href="{{ route('dashboard') }}" class="px-3 py-2 rounded-md text-sm font-medium {{ request()->routeIs('dashboard') ? 'bg-gray-900 text-white' : 'text-gray-100 hover:bg-gray-700 hover:text-white' }}">Dashboard</a>
+                    <a href="{{ route('general') }}" class="px-3 py-2 rounded-md text-sm font-medium {{ request()->routeIs('general') ? 'bg-gray-900 text-white' : 'text-gray-100 hover:bg-gray-700 hover:text-white' }}">Vista General</a>
+                    <a href="{{ route('proyectos.index') }}" class="px-3 py-2 rounded-md text-sm font-medium {{ request()->routeIs('proyectos.*') ? 'bg-gray-900 text-white' : 'text-gray-100 hover:bg-gray-700 hover:text-white' }}">Proyectos</a>
+                    <a href="{{ route('personal.index') }}" class="px-3 py-2 rounded-md text-sm font-medium {{ request()->routeIs('personal.*') ? 'bg-gray-900 text-white' : 'text-gray-100 hover:bg-gray-700 hover:text-white' }}">Personal</a>
+                    <a href="{{ route('nomina.semanal') }}" class="px-3 py-2 rounded-md text-sm font-medium {{ request()->routeIs('nomina.semanal') ? 'bg-gray-900 text-white' : 'text-gray-100 hover:bg-gray-700 hover:text-white' }}">Nómina</a>
+
+                    <a href="{{ route('nomina.reporte') }}" class="px-3 py-2 rounded-md text-sm font-medium {{ request()->routeIs('nomina.reporte') ? 'bg-gray-900 text-white' : 'text-gray-100 hover:bg-gray-700 hover:text-white' }}">Costo x Proyecto</a>
                     @if(auth()->user()->isAdmin())
-                        <a href="{{ route('festivos.index') }}" class="nav-link {{ request()->routeIs('festivos.*') ? 'nav-active' : 'nav-inactive' }}">Festivos</a>
+                        <a href="{{ route('festivos.index') }}" class="px-3 py-2 rounded-md text-sm font-medium {{ request()->routeIs('festivos.*') ? 'bg-gray-900 text-white' : 'text-gray-100 hover:bg-gray-700 hover:text-white' }}">Festivos</a>
+                        <a href="{{ route('nomina.categorias') }}" class="px-3 py-2 rounded-md text-sm font-medium {{ request()->routeIs('nomina.categorias') ? 'bg-gray-900 text-white' : 'text-gray-100 hover:bg-gray-700 hover:text-white' }}">Cat. Nómina</a>
                     @endif
                 </div>
                 <div class="flex items-center space-x-3">

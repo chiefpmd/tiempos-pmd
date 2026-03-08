@@ -9,6 +9,9 @@ use App\Http\Controllers\TiempoController;
 use App\Http\Controllers\ExportController;
 use App\Http\Controllers\DiaFestivoController;
 use App\Http\Controllers\ProyectoMaterialController;
+use App\Http\Controllers\NominaController;
+use App\Http\Controllers\CategoriaNominaController;
+use App\Http\Controllers\EquipoDiarioController;
 
 Route::get('/', fn() => redirect('/login'));
 
@@ -30,6 +33,7 @@ Route::middleware('auth')->group(function () {
     // Admin-only routes
     Route::middleware('admin')->group(function () {
         Route::post('/tiempos/guardar', [TiempoController::class, 'guardar'])->name('tiempos.guardar');
+        Route::post('/tiempos/reasignar-equipo', [TiempoController::class, 'reasignarEquipo'])->name('tiempos.reasignarEquipo');
         Route::post('/tiempos/guardar-rango', [TiempoController::class, 'guardarRango'])->name('tiempos.guardarRango');
         Route::post('/tiempos/borrar-rango', [TiempoController::class, 'borrarRango'])->name('tiempos.borrarRango');
         Route::post('/tiempos/recorrer/{proyecto}', [TiempoController::class, 'recorrerFechas'])->name('tiempos.recorrer');
@@ -55,5 +59,25 @@ Route::middleware('auth')->group(function () {
         Route::get('/festivos', [DiaFestivoController::class, 'index'])->name('festivos.index');
         Route::post('/festivos', [DiaFestivoController::class, 'store'])->name('festivos.store');
         Route::delete('/festivos/{festivo}', [DiaFestivoController::class, 'destroy'])->name('festivos.destroy');
+
+        // Nómina - guardar y prellenar (admin only)
+        Route::post('/nomina/guardar', [NominaController::class, 'guardar'])->name('nomina.guardar');
+        Route::post('/nomina/prellenar', [NominaController::class, 'prellenar'])->name('nomina.prellenar');
+
+        // Equipos del día (disabled - using lider_id from personal instead)
+        // Route::get('/nomina/equipos', [EquipoDiarioController::class, 'index'])->name('nomina.equipos');
+        // Route::post('/nomina/equipos/guardar', [EquipoDiarioController::class, 'guardar'])->name('nomina.equipos.guardar');
+        // Route::post('/nomina/equipos/copiar', [EquipoDiarioController::class, 'copiarDia'])->name('nomina.equipos.copiar');
+
+        // Categorías nómina (admin only)
+        Route::get('/nomina/categorias', [CategoriaNominaController::class, 'index'])->name('nomina.categorias');
+        Route::post('/nomina/categorias', [CategoriaNominaController::class, 'store'])->name('nomina.categorias.store');
+        Route::put('/nomina/categorias/{categoria}', [CategoriaNominaController::class, 'update'])->name('nomina.categorias.update');
+        Route::delete('/nomina/categorias/{categoria}', [CategoriaNominaController::class, 'destroy'])->name('nomina.categorias.destroy');
     });
+
+    // Nómina - vistas (all authenticated users)
+    Route::get('/nomina', [NominaController::class, 'semanal'])->name('nomina.semanal');
+    Route::get('/nomina/reporte', [NominaController::class, 'reporte'])->name('nomina.reporte');
+    Route::get('/nomina/reporte/exportar', [NominaController::class, 'exportarReporte'])->name('nomina.exportar');
 });

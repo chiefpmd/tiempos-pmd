@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Models\DiaFestivo;
+use App\Models\NominaDiaria;
 use App\Models\Proyecto;
 use App\Models\Mueble;
 use App\Models\Personal;
@@ -69,6 +70,26 @@ class TiempoController extends Controller
         );
 
         return response()->json(['ok' => true, 'id' => $tiempo->id]);
+    }
+
+    public function reasignarEquipo(Request $request)
+    {
+        $data = $request->validate([
+            'mueble_id' => 'required|exists:muebles,id',
+            'proceso' => 'required|in:Carpintería,Barniz,Instalación',
+            'personal_id' => 'required|exists:personal,id',
+            'personal_anterior_id' => 'nullable|integer',
+        ]);
+
+        $updated = 0;
+        if ($data['personal_anterior_id']) {
+            $updated = Tiempo::where('mueble_id', $data['mueble_id'])
+                ->where('proceso', $data['proceso'])
+                ->where('personal_id', $data['personal_anterior_id'])
+                ->update(['personal_id' => $data['personal_id']]);
+        }
+
+        return response()->json(['ok' => true, 'updated' => $updated]);
     }
 
     public function guardarRango(Request $request)
@@ -146,7 +167,16 @@ class TiempoController extends Controller
             }
         }
 
-        $personal = Personal::where('activo', true)->orderBy('equipo')->orderBy('nombre')->get();
+        // Only show leaders (each represents their team)
+        $lideres = Personal::where('activo', true)->where('es_lider', true)
+            ->orderBy('equipo')->orderBy('nombre')->get();
+
+        // Also include departments with no leader (solo workers)
+        $deptsSinLider = Personal::where('activo', true)
+            ->whereNotIn('equipo', $lideres->pluck('equipo')->unique())
+            ->orderBy('equipo')->orderBy('nombre')->get();
+
+        $personal = $lideres->merge($deptsSinLider);
 
         $tiempos = Tiempo::whereIn('personal_id', $personal->pluck('id'))
             ->whereBetween('fecha', [$fechaMin, $fechaMax])
@@ -154,25 +184,154 @@ class TiempoController extends Controller
             ->with('mueble.proyecto')
             ->get();
 
+        // Pre-index tiempos by personal_id + fecha for O(1) lookup
+        $tiemposIndex = [];
+        foreach ($tiempos as $t) {
+            $key = $t->personal_id . '_' . $t->fecha->format('Y-m-d');
+            $tiemposIndex[$key][] = $t;
+        }
+
+        // Load nomina data for people without tiempos (non-Vista-General departments)
+        $nominaEntries = NominaDiaria::whereIn('personal_id', $personal->pluck('id'))
+            ->whereBetween('fecha', [$fechaMin, $fechaMax])
+            ->whereNotNull('proyecto_id')
+            ->with('proyecto')
+            ->get();
+
+        $nominaIndex = [];
+        foreach ($nominaEntries as $n) {
+            $key = $n->personal_id . '_' . $n->fecha->format('Y-m-d');
+            $nominaIndex[$key] = $n;
+        }
+
         $disponibilidad = [];
         foreach ($personal as $p) {
             foreach ($diasHabiles as $dia) {
                 $fechaStr = $dia->format('Y-m-d');
-                $registros = $tiempos->where('personal_id', $p->id)
-                    ->filter(fn($t) => $t->fecha->format('Y-m-d') === $fechaStr);
+                $registros = $tiemposIndex[$p->id . '_' . $fechaStr] ?? [];
 
-                $proyectosEnDia = $registros->map(fn($t) => $t->mueble->proyecto->nombre)->unique()->values();
-                $totalHoras = $registros->sum('horas');
+                $nombres = [];
+                $totalHoras = 0;
+
+                $source = 'tiempos';
+
+                if (!empty($registros)) {
+                    foreach ($registros as $t) {
+                        $nombres[] = $t->mueble->proyecto->nombre;
+                        $totalHoras += $t->horas;
+                    }
+                } else {
+                    $nomina = $nominaIndex[$p->id . '_' . $fechaStr] ?? null;
+                    if ($nomina && $nomina->proyecto) {
+                        $nombres[] = $nomina->proyecto->nombre;
+                        $source = 'nomina';
+                    }
+                }
+
+                $nombres = array_values(array_unique($nombres));
 
                 $disponibilidad[$p->id][$fechaStr] = [
-                    'proyectos' => $proyectosEnDia->count(),
-                    'nombres' => $proyectosEnDia->all(),
+                    'proyectos' => count($nombres),
+                    'nombres' => $nombres,
                     'horas' => $totalHoras,
+                    'source' => $source,
                 ];
             }
         }
 
-        return view('tiempos.dashboard', compact('personal', 'diasHabiles', 'disponibilidad', 'proyectos', 'festivos'));
+        // Team member counts per leader
+        $teamCounts = Personal::where('activo', true)->whereNotNull('lider_id')
+            ->selectRaw('lider_id, count(*) as total')
+            ->groupBy('lider_id')
+            ->pluck('total', 'lider_id');
+
+        // === CAPACITY DATA: all active personnel (not just leaders) ===
+        $todosActivos = Personal::where('activo', true)->get();
+        $todosIds = $todosActivos->pluck('id');
+
+        // Department totals
+        $deptTotals = $todosActivos->groupBy('equipo')->map->count();
+
+        // All tiempos for all active personnel
+        $allTiempos = Tiempo::whereIn('personal_id', $todosIds)
+            ->whereBetween('fecha', [$fechaMin, $fechaMax])
+            ->where('horas', '>', 0)
+            ->with('mueble.proyecto')
+            ->get();
+
+        // All nomina for all active personnel
+        $allNomina = NominaDiaria::whereIn('personal_id', $todosIds)
+            ->whereBetween('fecha', [$fechaMin, $fechaMax])
+            ->whereNotNull('proyecto_id')
+            ->with('proyecto')
+            ->get();
+
+        // Build per-person per-day project assignments (from both sources)
+        $personDayProject = []; // personId_date => [projectNames]
+        foreach ($allTiempos as $t) {
+            $key = $t->personal_id . '_' . $t->fecha->format('Y-m-d');
+            $personDayProject[$key][] = $t->mueble->proyecto->nombre;
+        }
+        foreach ($allNomina as $n) {
+            $key = $n->personal_id . '_' . $n->fecha->format('Y-m-d');
+            if (!isset($personDayProject[$key]) && $n->proyecto) {
+                $personDayProject[$key][] = $n->proyecto->nombre;
+            }
+        }
+
+        // Group days by week
+        $semanas = collect($diasHabiles)->groupBy(fn($d) => $d->weekOfYear);
+
+        // Project capacity: unique people per project per week
+        $proyectoCapacidad = []; // proyectoNombre => [semana => count]
+        // Department capacity: assigned vs total per dept per week
+        $deptCapacidad = []; // equipo => [semana => ['asignados' => count, 'total' => count]]
+        $personEquipo = $todosActivos->pluck('equipo', 'id');
+
+        foreach ($semanas as $numSemana => $diasSemana) {
+            $personasEnProyecto = []; // proyectoNombre => [personIds]
+            $personasAsignadasPorDept = []; // equipo => [personIds]
+
+            foreach ($diasSemana as $dia) {
+                $fechaStr = $dia->format('Y-m-d');
+                foreach ($todosActivos as $p) {
+                    $key = $p->id . '_' . $fechaStr;
+                    $proyectos_dia = $personDayProject[$key] ?? [];
+                    $proyectos_dia = array_unique($proyectos_dia);
+
+                    foreach ($proyectos_dia as $projNombre) {
+                        $personasEnProyecto[$projNombre][$p->id] = true;
+                    }
+
+                    if (!empty($proyectos_dia)) {
+                        $personasAsignadasPorDept[$p->equipo][$p->id] = true;
+                    }
+                }
+            }
+
+            foreach ($personasEnProyecto as $projNombre => $ids) {
+                $proyectoCapacidad[$projNombre][$numSemana] = count($ids);
+            }
+
+            foreach ($deptTotals as $equipo => $total) {
+                $asignados = isset($personasAsignadasPorDept[$equipo]) ? count($personasAsignadasPorDept[$equipo]) : 0;
+                $deptCapacidad[$equipo][$numSemana] = [
+                    'asignados' => $asignados,
+                    'total' => $total,
+                    'libres' => $total - $asignados,
+                ];
+            }
+        }
+
+        ksort($proyectoCapacidad);
+        ksort($deptCapacidad);
+
+        $semanasNums = $semanas->keys()->sort()->values();
+
+        return view('tiempos.dashboard', compact(
+            'personal', 'diasHabiles', 'disponibilidad', 'proyectos', 'festivos',
+            'teamCounts', 'proyectoCapacidad', 'deptCapacidad', 'deptTotals', 'semanasNums'
+        ));
     }
 
     public function recorrerFechas(Request $request, Proyecto $proyecto)
@@ -201,16 +360,25 @@ class TiempoController extends Controller
             return response()->json(['ok' => false, 'error' => 'No hay tiempos para recorrer']);
         }
 
-        // Guardar snapshot para poder revertir
+        // Guardar snapshot completo para poder revertir
         $snapshot = $tiempos->map(fn($t) => [
-            'id' => $t->id,
+            'mueble_id' => $t->mueble_id,
+            'proceso' => $t->proceso,
+            'personal_id' => $t->personal_id,
             'fecha' => $t->fecha->format('Y-m-d'),
-        ])->toArray();
+            'horas' => $t->horas,
+        ])->values()->toArray();
 
         // Calcular nuevas fechas
-        $nuevasFechas = [];
+        $newRecords = [];
         foreach ($tiempos as $tiempo) {
-            $nuevasFechas[$tiempo->id] = $this->moverDiasHabiles($tiempo->fecha, $diasHabiles);
+            $newRecords[] = [
+                'mueble_id' => $tiempo->mueble_id,
+                'proceso' => $tiempo->proceso,
+                'personal_id' => $tiempo->personal_id,
+                'fecha' => $this->moverDiasHabiles($tiempo->fecha, $diasHabiles)->format('Y-m-d'),
+                'horas' => $tiempo->horas,
+            ];
         }
 
         try {
@@ -223,17 +391,11 @@ class TiempoController extends Controller
                 'user_id' => auth()->id(),
             ]);
 
-            // Poner fechas temporales únicas para evitar colisiones con unique constraint
-            $counter = 1;
-            foreach ($tiempos as $tiempo) {
-                $tempDate = Carbon::parse('1900-01-01')->addDays($counter);
-                Tiempo::where('id', $tiempo->id)->update(['fecha' => $tempDate]);
-                $counter++;
-            }
+            // Delete old records and re-insert with new dates to avoid unique constraint collisions
+            Tiempo::whereIn('id', $tiempos->pluck('id'))->delete();
 
-            // Aplicar fechas nuevas
-            foreach ($nuevasFechas as $id => $fecha) {
-                Tiempo::where('id', $id)->update(['fecha' => $fecha]);
+            foreach ($newRecords as $rec) {
+                Tiempo::create($rec);
             }
 
             DB::commit();
@@ -258,17 +420,25 @@ class TiempoController extends Controller
         try {
             DB::beginTransaction();
 
-            // Primero poner fechas temporales únicas para evitar colisiones
-            $counter = 1;
-            foreach ($shift->snapshot as $entry) {
-                $tempDate = Carbon::parse('1900-01-01')->addDays($counter);
-                Tiempo::where('id', $entry['id'])->update(['fecha' => $tempDate]);
-                $counter++;
+            // Delete current records for this mueble+proceso combination and recreate from snapshot
+            $snapshot = collect($shift->snapshot);
+            $groups = $snapshot->groupBy(fn($e) => $e['mueble_id'] . '_' . $e['proceso']);
+
+            foreach ($groups as $key => $entries) {
+                $first = $entries->first();
+                Tiempo::where('mueble_id', $first['mueble_id'])
+                    ->where('proceso', $first['proceso'])
+                    ->delete();
             }
 
-            // Luego restaurar las fechas originales
-            foreach ($shift->snapshot as $entry) {
-                Tiempo::where('id', $entry['id'])->update(['fecha' => $entry['fecha']]);
+            foreach ($snapshot as $entry) {
+                Tiempo::create([
+                    'mueble_id' => $entry['mueble_id'],
+                    'proceso' => $entry['proceso'],
+                    'personal_id' => $entry['personal_id'],
+                    'fecha' => $entry['fecha'],
+                    'horas' => $entry['horas'],
+                ]);
             }
 
             $shift->update(['reverted' => true]);
