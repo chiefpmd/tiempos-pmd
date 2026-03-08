@@ -29,6 +29,9 @@ Route::middleware('auth')->group(function () {
 
     Route::get('/export/proyecto/{proyecto}', [ExportController::class, 'exportarProyecto'])->name('export.proyecto');
     Route::get('/export/general', [ExportController::class, 'exportarGeneral'])->name('export.general');
+    Route::get('/export/general-html', [ExportController::class, 'exportarGeneralHtml'])->name('export.general.html');
+    Route::get('/export/dashboard-html', [ExportController::class, 'exportarDashboardHtml'])->name('export.dashboard.html');
+    Route::get('/export/nomina-excel', [ExportController::class, 'exportarNominaExcel'])->name('export.nomina.excel');
 
     // Admin-only routes
     Route::middleware('admin')->group(function () {

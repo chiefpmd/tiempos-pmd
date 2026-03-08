@@ -79,7 +79,20 @@
 <div class="max-w-full mx-auto">
     <div class="flex justify-between items-center mb-3">
         <h1 class="text-xl font-bold">Vista General - Todos los Proyectos</h1>
-        <a href="{{ route('export.general') }}" class="bg-green-600 text-white px-3 py-1.5 rounded text-sm hover:bg-green-700">Exportar Excel</a>
+        <div class="flex items-center gap-2">
+            @if($ventanaInicio ?? false)
+            <div class="flex items-center gap-1 text-sm">
+                @if($canGoBack)
+                    <a href="{{ route('general', ['desde' => $allDesde]) }}" class="px-2 py-1 bg-gray-200 rounded hover:bg-gray-300" title="Ver todo">&laquo;</a>
+                    <a href="{{ route('general', ['desde' => $prevDesde]) }}" class="px-2 py-1 bg-gray-200 rounded hover:bg-gray-300" title="2 semanas atras">&lsaquo;</a>
+                @endif
+                <a href="{{ route('general') }}" class="px-2 py-1 bg-blue-100 text-blue-700 rounded hover:bg-blue-200 text-xs font-medium">Hoy</a>
+                <a href="{{ route('general', ['desde' => $nextDesde]) }}" class="px-2 py-1 bg-gray-200 rounded hover:bg-gray-300" title="2 semanas adelante">&rsaquo;</a>
+            </div>
+            @endif
+            <a href="{{ route('export.general.html', request()->query()) }}" class="bg-gray-600 text-white px-3 py-1.5 rounded text-sm hover:bg-gray-700">Descargar HTML</a>
+            <a href="{{ route('export.general') }}" class="bg-green-600 text-white px-3 py-1.5 rounded text-sm hover:bg-green-700">Exportar Excel</a>
+        </div>
     </div>
 
     <div class="flex space-x-4 mb-3 text-xs">

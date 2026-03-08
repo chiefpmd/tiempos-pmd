@@ -33,7 +33,19 @@
             <h1 class="text-xl font-bold">Dashboard</h1>
             <p class="text-sm text-gray-500">Disponibilidad y capacidad por proyecto</p>
         </div>
-        <a href="{{ route('export.general') }}" class="bg-green-600 text-white px-3 py-1.5 rounded text-sm hover:bg-green-700">Exportar</a>
+        <div class="flex items-center gap-2">
+            @if(isset($canGoBack))
+            <div class="flex items-center gap-1 text-sm">
+                @if($canGoBack)
+                    <a href="{{ route('dashboard', ['desde' => $allDesde]) }}" class="px-2 py-1 bg-gray-200 rounded hover:bg-gray-300" title="Ver todo">&laquo;</a>
+                    <a href="{{ route('dashboard', ['desde' => $prevDesde]) }}" class="px-2 py-1 bg-gray-200 rounded hover:bg-gray-300" title="2 semanas atras">&lsaquo;</a>
+                @endif
+                <a href="{{ route('dashboard') }}" class="px-2 py-1 bg-blue-100 text-blue-700 rounded hover:bg-blue-200 text-xs font-medium">Hoy</a>
+                <a href="{{ route('dashboard', ['desde' => $nextDesde]) }}" class="px-2 py-1 bg-gray-200 rounded hover:bg-gray-300" title="2 semanas adelante">&rsaquo;</a>
+            </div>
+            @endif
+            <a href="{{ route('export.dashboard.html', request()->query()) }}" class="bg-gray-600 text-white px-3 py-1.5 rounded text-sm hover:bg-gray-700">Descargar HTML</a>
+        </div>
     </div>
 
     @if($personal->isEmpty())

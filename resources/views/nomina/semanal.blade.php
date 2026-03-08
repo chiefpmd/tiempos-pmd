@@ -26,6 +26,11 @@
             <button type="submit" class="bg-gray-600 text-white px-3 py-1 rounded text-sm hover:bg-gray-700">Ir</button>
         </form>
 
+        <a href="{{ route('export.nomina.excel', ['semana' => $semana, 'semana_fin' => $semanaFin, 'anio' => $anio, 'personal_id' => $personalFiltro]) }}"
+           class="bg-green-600 text-white px-3 py-1 rounded text-sm hover:bg-green-700">
+            Exportar Excel
+        </a>
+
         @if(auth()->user()->isAdmin())
         <button onclick="prellenar()" id="btn-prellenar"
                 class="bg-indigo-600 text-white px-3 py-1 rounded text-sm hover:bg-indigo-700">

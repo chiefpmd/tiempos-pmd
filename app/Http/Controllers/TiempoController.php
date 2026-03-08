@@ -154,8 +154,25 @@ class TiempoController extends Controller
             ]);
         }
 
-        $fechaMin = $proyectos->min('fecha_inicio');
-        $fechaMax = $proyectos->max(fn($p) => $p->fecha_fin);
+        $rangoMin = $proyectos->min('fecha_inicio');
+        $rangoMax = $proyectos->max(fn($p) => $p->fecha_fin);
+
+        // Rolling window: 2 weeks back from today to furthest project end
+        $defaultStart = Carbon::now()->startOfWeek()->subWeeks(2);
+        $fechaMin = $request->has('desde')
+            ? Carbon::parse($request->input('desde'))->startOfWeek()
+            : $defaultStart;
+        $fechaMax = $rangoMax;
+
+        if ($fechaMin->lt($rangoMin)) {
+            $fechaMin = $rangoMin->copy();
+        }
+
+        $canGoBack = $fechaMin->gt($rangoMin);
+        $prevDesde = $fechaMin->copy()->subWeeks(2)->format('Y-m-d');
+        $nextDesde = $fechaMin->copy()->addWeeks(2)->format('Y-m-d');
+        $todayDesde = $defaultStart->format('Y-m-d');
+        $allDesde = $rangoMin->format('Y-m-d');
 
         $festivos = DiaFestivo::whereBetween('fecha', [$fechaMin, $fechaMax])->pluck('nombre', 'fecha')->mapWithKeys(fn($n, $f) => [Carbon::parse($f)->format('Y-m-d') => $n]);
 
@@ -340,7 +357,8 @@ class TiempoController extends Controller
 
         return view('tiempos.dashboard', compact(
             'personal', 'diasHabiles', 'disponibilidad', 'proyectos', 'festivos',
-            'teamCounts', 'proyectoCapacidad', 'deptCapacidad', 'deptTotals', 'semanasNums'
+            'teamCounts', 'proyectoCapacidad', 'deptCapacidad', 'deptTotals', 'semanasNums',
+            'canGoBack', 'prevDesde', 'nextDesde', 'todayDesde', 'allDesde'
         ));
     }
 
@@ -493,16 +511,32 @@ class TiempoController extends Controller
             ->get();
 
         if ($proyectos->isEmpty()) {
-            return view('tiempos.general', ['proyectos' => $proyectos, 'diasHabiles' => [], 'tiemposMap' => []]);
+            return view('tiempos.general', ['proyectos' => $proyectos, 'diasHabiles' => [], 'tiemposMap' => [], 'ventanaInicio' => null, 'ventanaFin' => null]);
         }
 
-        $fechaMin = $proyectos->min('fecha_inicio');
-        $fechaMax = $proyectos->max(fn($p) => $p->fecha_fin);
+        // Full project range (for data queries)
+        $rangoMin = $proyectos->min('fecha_inicio');
+        $rangoMax = $proyectos->max(fn($p) => $p->fecha_fin);
 
-        $festivos = DiaFestivo::whereBetween('fecha', [$fechaMin, $fechaMax])->pluck('nombre', 'fecha')->mapWithKeys(fn($n, $f) => [Carbon::parse($f)->format('Y-m-d') => $n]);
+        // Rolling window: default = 2 weeks back from today, extends to furthest project end
+        // User can override with ?desde= parameter to navigate
+        $defaultStart = Carbon::now()->startOfWeek()->subWeeks(2);
+        $ventanaInicio = $request->has('desde')
+            ? Carbon::parse($request->input('desde'))->startOfWeek()
+            : $defaultStart;
+
+        // Always extend to the furthest active project end
+        $ventanaFin = $rangoMax;
+
+        // Clamp to not go before earliest project
+        if ($ventanaInicio->lt($rangoMin)) {
+            $ventanaInicio = $rangoMin->copy();
+        }
+
+        $festivos = DiaFestivo::whereBetween('fecha', [$ventanaInicio, $ventanaFin])->pluck('nombre', 'fecha')->mapWithKeys(fn($n, $f) => [Carbon::parse($f)->format('Y-m-d') => $n]);
 
         $diasHabiles = [];
-        $periodo = CarbonPeriod::create($fechaMin, $fechaMax);
+        $periodo = CarbonPeriod::create($ventanaInicio, $ventanaFin);
         foreach ($periodo as $dia) {
             if ($dia->isWeekday()) {
                 $diasHabiles[] = $dia->copy();
@@ -511,7 +545,7 @@ class TiempoController extends Controller
 
         $allMuebleIds = $proyectos->flatMap(fn($p) => $p->muebles->pluck('id'));
         $tiempos = Tiempo::whereIn('mueble_id', $allMuebleIds)
-            ->whereBetween('fecha', [$fechaMin, $fechaMax])
+            ->whereBetween('fecha', [$ventanaInicio, $ventanaFin])
             ->get();
 
         $tiemposMap = [];
@@ -523,6 +557,16 @@ class TiempoController extends Controller
         $personal = Personal::where('activo', true)->get()->keyBy('id');
         $procesos = ['Carpintería', 'Barniz', 'Instalación'];
 
-        return view('tiempos.general', compact('proyectos', 'diasHabiles', 'tiemposMap', 'personal', 'procesos', 'festivos'));
+        // Navigation data
+        $canGoBack = $ventanaInicio->gt($rangoMin);
+        $prevDesde = $ventanaInicio->copy()->subWeeks(2)->format('Y-m-d');
+        $nextDesde = $ventanaInicio->copy()->addWeeks(2)->format('Y-m-d');
+        $todayDesde = $defaultStart->format('Y-m-d');
+        $allDesde = $rangoMin->format('Y-m-d');
+
+        return view('tiempos.general', compact(
+            'proyectos', 'diasHabiles', 'tiemposMap', 'personal', 'procesos', 'festivos',
+            'ventanaInicio', 'ventanaFin', 'canGoBack', 'prevDesde', 'nextDesde', 'todayDesde', 'allDesde'
+        ));
     }
 }
