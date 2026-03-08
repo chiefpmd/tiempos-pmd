@@ -246,9 +246,11 @@
                                     $persona = $asignado ? ($personal[$asignado] ?? null) : null;
                                     $personas = $tiemposProceso->where('horas', '>', 0)->first()?->horas ?? 0;
                                     $fechas = $tiemposProceso->where('horas', '>', 0)->pluck('fecha')->map(fn($f) => $f->format('Y-m-d'));
-                                    $fechaMin = $fechas->min();
-                                    $fechaMax = $fechas->max();
-                                    $diasCount = $fechas->count();
+                                    $gridDates = collect($diasHabiles)->map(fn($d) => $d->format('Y-m-d'));
+                                    $fechasVisibles = $fechas->intersect($gridDates);
+                                    $fechaMin = $fechasVisibles->min();
+                                    $fechaMax = $fechasVisibles->max();
+                                    $diasCount = $fechasVisibles->count();
                                     $muebleProcs[$proceso] = [
                                         'asignado' => $asignado,
                                         'persona' => $persona ? ['nombre' => $persona->nombre, 'color_hex' => $persona->color_hex] : null,
