@@ -56,6 +56,21 @@
     .gantt-handle-left { left: 0; border-radius: 3px 0 0 3px; }
     .gantt-handle-right { right: 0; border-radius: 0 3px 3px 0; }
 
+    /* Edit personas popup */
+    #edit-personas-popup {
+        display: none; position: fixed; z-index: 100; background: #fff; border: 2px solid #6b7280;
+        border-radius: 6px; padding: 8px; box-shadow: 0 4px 12px rgba(0,0,0,0.3); font-size: 12px;
+    }
+    #edit-personas-popup.active { display: flex; align-items: center; gap: 6px; }
+    #edit-personas-popup input {
+        width: 50px; text-align: center; border: 1px solid #d1d5db; border-radius: 4px; padding: 2px 4px; font-size: 12px;
+    }
+    #edit-personas-popup button {
+        background: #3b82f6; color: #fff; border: none; border-radius: 4px; padding: 3px 10px; cursor: pointer; font-size: 11px;
+    }
+    #edit-personas-popup button:hover { background: #2563eb; }
+    #edit-personas-popup .cancel-btn { background: #9ca3af; }
+
     /* Process color legend dots */
     .proc-dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; margin-right: 2px; }
     .proc-dot-carp { background-color: #f59e0b; }
@@ -361,6 +376,12 @@
         <button type="button" class="text-xs text-gray-400 hover:text-gray-600" id="assign-cancel">Cerrar</button>
     </div>
 </div>
+<div id="edit-personas-popup">
+    <span style="font-weight:600; color:#374151;">Personas:</span>
+    <input type="number" id="edit-personas-input" min="0.5" max="24" step="0.5" value="1">
+    <button id="edit-personas-save">OK</button>
+    <button class="cancel-btn" id="edit-personas-cancel">X</button>
+</div>
 @endsection
 
 @push('scripts')
@@ -571,6 +592,11 @@ document.addEventListener('DOMContentLoaded', function() {
         resizeTimer = setTimeout(buildAllGanttBars, 200);
     });
 
+    // ===== EDIT PERSONAS (click on bar without dragging) =====
+    const editPopup = document.getElementById('edit-personas-popup');
+    const editInput = document.getElementById('edit-personas-input');
+    let editingBar = null;
+
     // ===== DRAG & RESIZE LOGIC =====
 
     function snapToColumn(x, colPos) {
@@ -610,10 +636,12 @@ document.addEventListener('DOMContentLoaded', function() {
             mode = handle.classList.contains('gantt-handle-left') ? 'resize-left' : 'resize-right';
         }
 
+        let dragged = false;
         bar.classList.add('dragging');
 
         function onMouseMove(ev) {
             const dx = ev.clientX - startX;
+            if (Math.abs(dx) > 3) dragged = true;
             if (mode === 'move') {
                 bar.style.left = (origLeft + dx) + 'px';
             } else if (mode === 'resize-left') {
@@ -630,6 +658,20 @@ document.addEventListener('DOMContentLoaded', function() {
             document.removeEventListener('mousemove', onMouseMove);
             document.removeEventListener('mouseup', onMouseUp);
             bar.classList.remove('dragging');
+
+            // If not dragged, show edit personas popup
+            if (!dragged && !handle) {
+                bar.style.left = origLeft + 'px';
+                bar.style.width = origWidth + 'px';
+                editingBar = bar;
+                editInput.value = parseFloat(bar.dataset.personas) || 1;
+                editPopup.style.left = ev.clientX + 'px';
+                editPopup.style.top = (ev.clientY - 40) + 'px';
+                editPopup.classList.add('active');
+                editInput.focus();
+                editInput.select();
+                return;
+            }
 
             const freshColPos = getColPositions(table);
 
@@ -797,6 +839,52 @@ document.addEventListener('DOMContentLoaded', function() {
                 if (dateRow) dateRow.classList.add('hidden');
             }
         });
+    });
+
+    document.getElementById('edit-personas-cancel').addEventListener('click', function() {
+        editPopup.classList.remove('active');
+        editingBar = null;
+    });
+
+    function saveEditPersonas() {
+        if (!editingBar) return;
+        const newPersonas = parseFloat(editInput.value) || 1;
+        const bar = editingBar;
+
+        editPopup.classList.remove('active');
+
+        fetch('{{ route("tiempos.guardarRango") }}', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'X-CSRF-TOKEN': csrfToken, 'Accept': 'application/json' },
+            body: JSON.stringify({
+                mueble_id: parseInt(bar.dataset.muebleId),
+                proceso: bar.dataset.proceso,
+                personal_id: parseInt(bar.dataset.personalId),
+                fecha_inicio: bar.dataset.firstDate,
+                fecha_fin: bar.dataset.lastDate,
+                personas: newPersonas
+            })
+        })
+        .then(r => r.json())
+        .then(data => {
+            if (data.ok || data.success) {
+                bar.dataset.personas = newPersonas;
+                const initial = bar.dataset.proceso.charAt(0);
+                bar.childNodes[0].textContent = initial + (newPersonas > 0 ? ' ' + newPersonas : '');
+                bar.style.backgroundColor = bar.dataset.color + 'AA';
+            } else {
+                alert('Error: ' + (data.error || JSON.stringify(data)));
+            }
+        })
+        .catch(() => alert('Error al actualizar personas'));
+
+        editingBar = null;
+    }
+
+    document.getElementById('edit-personas-save').addEventListener('click', saveEditPersonas);
+    editInput.addEventListener('keydown', function(e) {
+        if (e.key === 'Enter') saveEditPersonas();
+        if (e.key === 'Escape') { editPopup.classList.remove('active'); editingBar = null; }
     });
 
     // Handle "Crear" button — save new range
