@@ -31,7 +31,7 @@
 @else
 
 @php
-function renderCostoSection($titulo, $datos, $semanasConDatos, $totalGeneral) {
+function renderCostoSection($titulo, $datos, $semanasConDatos, $totalGeneral, $proyectosLink = null, $semanaInicio = null, $semanaFin = null, $anio = null) {
     if (empty($datos)) return;
     echo '<h2 class="text-base font-semibold text-gray-700 mt-6 mb-2">' . e($titulo) . '</h2>';
     echo '<div class="bg-white rounded-lg shadow overflow-x-auto mb-4"><table class="min-w-full text-xs">';
@@ -49,7 +49,16 @@ function renderCostoSection($titulo, $datos, $semanasConDatos, $totalGeneral) {
         $totalFila = array_sum($semanas);
         $subtotal += $totalFila;
         echo '<tr class="hover:bg-gray-50">';
-        echo '<td class="px-3 py-1.5 text-gray-800">' . e($nombre) . '</td>';
+
+        // Make project names clickable
+        $proy = $proyectosLink ? ($proyectosLink[$nombre] ?? null) : null;
+        if ($proy) {
+            $url = route('nomina.costoMuebles', $proy->id) . '?semana_inicio=' . $semanaInicio . '&semana_fin=' . $semanaFin . '&anio=' . $anio;
+            echo '<td class="px-3 py-1.5"><a href="' . $url . '" class="text-blue-600 hover:underline">' . e($nombre) . '</a></td>';
+        } else {
+            echo '<td class="px-3 py-1.5 text-gray-800">' . e($nombre) . '</td>';
+        }
+
         foreach ($semanasConDatos as $sem) {
             $val = $semanas[$sem] ?? 0;
             echo '<td class="px-3 py-1.5 text-right font-mono">' . ($val > 0 ? '$' . number_format($val, 2) : '-') . '</td>';
@@ -74,7 +83,7 @@ function renderCostoSection($titulo, $datos, $semanasConDatos, $totalGeneral) {
 }
 @endphp
 
-@php renderCostoSection('Proyectos (Productivo)', $costoProyectos, $semanasConDatos, $totalGeneral) @endphp
+@php renderCostoSection('Proyectos (Productivo)', $costoProyectos, $semanasConDatos, $totalGeneral, $proyectosActivos, $semanaInicio, $semanaFin, $anio) @endphp
 @php renderCostoSection('No Productivo', $costoNoProd, $semanasConDatos, $totalGeneral) @endphp
 @php renderCostoSection('Horas Extra', $costoHe, $semanasConDatos, $totalGeneral) @endphp
 

@@ -83,14 +83,14 @@ class ExportController extends Controller
         if ($personalFiltro) {
             $registros = $registros->where('personal_id', $personalFiltro);
         }
-        $registros = $registros->with(['proyecto', 'categoria'])->get()
+        $registros = $registros->with(['proyecto', 'categoria', 'mueble'])->get()
             ->keyBy(fn($r) => $r->personal_id . '_' . $r->fecha->format('Y-m-d'));
 
         $proyectos = Proyecto::where('status', 'activo')->orderBy('nombre')->get();
 
         // Build Excel data
         $rows = [];
-        $rows[] = ['Empleado', 'Equipo', 'Fecha', 'Dia', 'Asignacion', 'Horas Extra', 'Proyecto HE', 'Costo'];
+        $rows[] = ['Empleado', 'Equipo', 'Fecha', 'Dia', 'Asignacion', 'Mueble', 'Horas Extra', 'Proyecto HE', 'Costo'];
 
         $diasNombre = ['Lun', 'Mar', 'Mié', 'Jue', 'Vie'];
 
@@ -108,12 +108,18 @@ class ExportController extends Controller
                     }
                 }
 
+                $mueble = '';
+                if ($reg && $reg->mueble_id && $reg->mueble) {
+                    $mueble = $reg->mueble->numero . ' - ' . $reg->mueble->descripcion;
+                }
+
                 $rows[] = [
                     $emp->nombre,
                     $emp->equipo,
                     $dia->format('Y-m-d'),
                     $diasNombre[$dia->dayOfWeekIso - 1] ?? '',
                     $asignacion,
+                    $mueble,
                     $reg ? floatval($reg->horas_extra) : 0,
                     $reg && $reg->proyecto_he_id ? ($proyectos->find($reg->proyecto_he_id)?->nombre ?? '') : '',
                     $reg ? floatval($reg->costo_total) : 0,

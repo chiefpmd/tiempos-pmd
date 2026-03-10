@@ -58,6 +58,7 @@
                 <th class="px-3 py-2 text-left font-medium text-gray-500 min-w-[180px]">Empleado</th>
                 <th class="px-3 py-2 text-left font-medium text-gray-500 w-24">Día</th>
                 <th class="px-3 py-2 text-left font-medium text-gray-500 min-w-[200px]">Proyecto / Categoría</th>
+                <th class="px-3 py-2 text-left font-medium text-gray-500 min-w-[160px]">Mueble</th>
                 <th class="px-3 py-2 text-left font-medium text-gray-500 w-16">HE</th>
                 <th class="px-3 py-2 text-left font-medium text-gray-500 min-w-[160px]">Proyecto HE</th>
                 <th class="px-3 py-2 text-right font-medium text-gray-500 w-24">Costo</th>
@@ -98,6 +99,13 @@
                             @else
                                 <div class="text-amber-500 text-[10px]">Sin sueldo</div>
                             @endif
+                            @if(auth()->user()->isAdmin())
+                            <button onclick="aplicarMuebleSemana({{ $emp->id }})"
+                                    class="mt-1 text-[10px] bg-blue-50 text-blue-600 border border-blue-200 rounded px-1.5 py-0.5 hover:bg-blue-100"
+                                    title="Copia el mueble del primer día a todos los días de esta persona">
+                                Mueble &rarr; semana
+                            </button>
+                            @endif
                         </td>
                         @endif
 
@@ -128,6 +136,20 @@
                                         </option>
                                     @endforeach
                                 </optgroup>
+                            </select>
+                        </td>
+
+                        <td class="px-3 py-1">
+                            <select class="mueble-select border rounded px-1 py-0.5 text-xs w-full"
+                                    onchange="guardarCelda(this)" {{ auth()->user()->isAdmin() ? '' : 'disabled' }}>
+                                <option value="">-- Sin mueble --</option>
+                                @if($reg && $reg->proyecto_id && isset($mueblesPorProyecto[$reg->proyecto_id]))
+                                    @foreach($mueblesPorProyecto[$reg->proyecto_id] as $m)
+                                        <option value="{{ $m->id }}" {{ $reg->mueble_id == $m->id ? 'selected' : '' }}>
+                                            {{ $m->numero }} - {{ $m->descripcion }}
+                                        </option>
+                                    @endforeach
+                                @endif
                             </select>
                         </td>
 
@@ -173,6 +195,24 @@
 <script>
 const csrfToken = document.querySelector('meta[name="csrf-token"]').content;
 
+const mueblesPorProyecto = @json($mueblesPorProyecto->map(fn($muebles) => $muebles->map(fn($m) => ['id' => $m->id, 'numero' => $m->numero, 'descripcion' => $m->descripcion])));
+
+function actualizarMuebles(row, proyectoId) {
+    const muebleSelect = row.querySelector('.mueble-select');
+    if (!muebleSelect) return;
+    const currentVal = muebleSelect.value;
+    muebleSelect.innerHTML = '<option value="">-- Sin mueble --</option>';
+    if (proyectoId && mueblesPorProyecto[proyectoId]) {
+        mueblesPorProyecto[proyectoId].forEach(m => {
+            const opt = document.createElement('option');
+            opt.value = m.id;
+            opt.textContent = m.numero + ' - ' + m.descripcion;
+            if (String(m.id) === String(currentVal)) opt.selected = true;
+            muebleSelect.appendChild(opt);
+        });
+    }
+}
+
 function guardarCelda(el) {
     const row = el.closest('tr');
     const personalId = row.dataset.personalId;
@@ -181,6 +221,7 @@ function guardarCelda(el) {
     const salarioHe = parseFloat(row.dataset.salarioHe) || 0;
 
     const asignacionSelect = row.querySelector('.asignacion-select');
+    const muebleSelect = row.querySelector('.mueble-select');
     const heInput = row.querySelector('.he-input');
     const heProyectoSelect = row.querySelector('.he-proyecto-select');
     const costoCell = row.querySelector('.costo-cell');
@@ -195,6 +236,13 @@ function guardarCelda(el) {
         asignacionId = parts.slice(1).join('_');
     }
 
+    // When project changes, update mueble dropdown
+    if (el === asignacionSelect) {
+        const proyectoId = (asignacionTipo === 'proyecto') ? asignacionId : null;
+        actualizarMuebles(row, proyectoId);
+    }
+
+    const muebleId = muebleSelect.value || null;
     const horasExtra = parseFloat(heInput.value) || 0;
     const projectHeId = heProyectoSelect.value || null;
 
@@ -215,6 +263,7 @@ function guardarCelda(el) {
             fecha: fecha,
             asignacion_tipo: asignacionTipo,
             asignacion_id: asignacionId,
+            mueble_id: muebleId,
             horas_extra: horasExtra,
             proyecto_he_id: projectHeId,
         }),
@@ -230,6 +279,55 @@ function guardarCelda(el) {
         costoCell.textContent = 'ERROR';
         console.error(err);
     });
+}
+
+async function aplicarMuebleSemana(personalId) {
+    const rows = document.querySelectorAll(`tr[data-personal-id="${personalId}"]`);
+    if (!rows.length) return;
+
+    // Find the first row that has a mueble selected
+    let muebleId = null;
+    let proyectoVal = null;
+    for (const row of rows) {
+        const ms = row.querySelector('.mueble-select');
+        const as = row.querySelector('.asignacion-select');
+        if (ms && ms.value) {
+            muebleId = ms.value;
+            proyectoVal = as.value;
+            break;
+        }
+    }
+
+    if (!muebleId) {
+        alert('Primero selecciona un mueble en algún día.');
+        return;
+    }
+
+    let count = 0;
+    for (const row of rows) {
+        const muebleSelect = row.querySelector('.mueble-select');
+        const asignacionSelect = row.querySelector('.asignacion-select');
+
+        // Only apply to rows that have the same project assigned
+        if (asignacionSelect.value !== proyectoVal) continue;
+        // Skip if already has the same mueble
+        if (muebleSelect.value === muebleId) continue;
+
+        // Update dropdown options if needed, then set value
+        const parts = proyectoVal.split('_');
+        if (parts[0] === 'proyecto') {
+            actualizarMuebles(row, parts.slice(1).join('_'));
+        }
+        muebleSelect.value = muebleId;
+        guardarCelda(muebleSelect);
+        count++;
+        // Small delay to not overwhelm the server
+        await new Promise(r => setTimeout(r, 100));
+    }
+
+    if (count === 0) {
+        alert('Todos los días ya tienen ese mueble asignado.');
+    }
 }
 
 function prellenar() {

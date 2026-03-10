@@ -23,6 +23,7 @@
                     <span class="text-white font-bold text-lg">PMD Tiempos</span>
                     <a href="{{ route('dashboard') }}" class="px-3 py-2 rounded-md text-sm font-medium {{ request()->routeIs('dashboard') ? 'bg-gray-900 text-white' : 'text-gray-100 hover:bg-gray-700 hover:text-white' }}">Dashboard</a>
                     <a href="{{ route('general') }}" class="px-3 py-2 rounded-md text-sm font-medium {{ request()->routeIs('general') ? 'bg-gray-900 text-white' : 'text-gray-100 hover:bg-gray-700 hover:text-white' }}">Vista General</a>
+                    <a href="{{ route('gantt.anual') }}" class="px-3 py-2 rounded-md text-sm font-medium {{ request()->routeIs('gantt.anual') ? 'bg-gray-900 text-white' : 'text-gray-100 hover:bg-gray-700 hover:text-white' }}">Gantt Anual</a>
                     <a href="{{ route('proyectos.index') }}" class="px-3 py-2 rounded-md text-sm font-medium {{ request()->routeIs('proyectos.*') ? 'bg-gray-900 text-white' : 'text-gray-100 hover:bg-gray-700 hover:text-white' }}">Proyectos</a>
                     <a href="{{ route('personal.index') }}" class="px-3 py-2 rounded-md text-sm font-medium {{ request()->routeIs('personal.*') ? 'bg-gray-900 text-white' : 'text-gray-100 hover:bg-gray-700 hover:text-white' }}">Personal</a>
                     <a href="{{ route('nomina.semanal') }}" class="px-3 py-2 rounded-md text-sm font-medium {{ request()->routeIs('nomina.semanal') ? 'bg-gray-900 text-white' : 'text-gray-100 hover:bg-gray-700 hover:text-white' }}">Nómina</a>

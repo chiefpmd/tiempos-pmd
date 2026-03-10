@@ -6,6 +6,15 @@
     .gen-cell { min-width: 36px; font-size: 11px; padding: 1px; }
     .mueble-sep { border-top: 2px solid #d1d5db; }
     .proyecto-sep { border-top: 3px solid #6b7280; }
+
+    /* Sticky headers (vertical scroll) */
+    .gantt-sticky-head th { position: sticky; top: 0; z-index: 20; }
+    .gantt-sticky-head tr:first-child th { top: 0; }
+    .gantt-sticky-head tr:nth-child(2) th { top: 25px; }
+
+    /* Sticky descripcion column */
+    .sticky-desc { position: sticky; left: 80px; z-index: 5; background: #fff; }
+    .sticky-desc-header { position: sticky; left: 80px; z-index: 21; }
     .add-mueble-form { display: none; }
     .add-mueble-form.active { display: flex; }
     .festivo { background-color: #f3e8ff; }
@@ -222,26 +231,27 @@
             </div>
             @endif
 
-            <div class="bg-white rounded-lg shadow overflow-x-auto">
+            <div class="bg-white rounded-lg shadow overflow-auto" style="max-height: calc(100vh - 200px);">
                 <table class="min-w-full text-xs">
                     @php
                         $semanas = collect($diasHabiles)->groupBy(fn($d) => $d->weekOfYear);
                         $fechaPedido = $matPedido?->fecha?->format('Y-m-d');
                         $fechaEntrega = $matEntrega?->fecha?->format('Y-m-d');
                     @endphp
-                    <thead class="bg-gray-50">
+                    <thead class="bg-gray-50 gantt-sticky-head">
                         <tr>
-                            <th class="px-2 py-1 sticky left-0 bg-gray-50 z-10" colspan="2"></th>
+                            <th class="px-2 py-1 sticky left-0 bg-gray-50 z-20" style="min-width:80px"></th>
+                            <th class="px-2 py-1 sticky-desc-header bg-gray-50" style="min-width:160px"></th>
                             @foreach($semanas as $numSemana => $diasSemana)
                                 <th class="text-center font-bold text-blue-600 bg-blue-50 border-l-2 border-blue-200 text-xs" colspan="{{ count($diasSemana) }}">
                                     Sem {{ $numSemana }}
                                 </th>
                             @endforeach
-                            <th></th>
+                            <th class="bg-gray-50"></th>
                         </tr>
                         <tr>
-                            <th class="px-2 py-1 text-left font-medium text-gray-500 sticky left-0 bg-gray-50 z-10" style="min-width:80px">Mueble</th>
-                            <th class="px-2 py-1 text-left font-medium text-gray-500" style="min-width:160px">Descripcion</th>
+                            <th class="px-2 py-1 text-left font-medium text-gray-500 sticky left-0 bg-gray-50 z-20" style="min-width:80px">Mueble</th>
+                            <th class="px-2 py-1 text-left font-medium text-gray-500 sticky-desc-header bg-gray-50" style="min-width:160px">Descripcion</th>
                             @foreach($diasHabiles as $dia)
                                 @php
                                     $esFestivo = isset($festivos[$dia->format('Y-m-d')]);
@@ -260,7 +270,7 @@
                                     {{ $dia->format('d/M') }}
                                 </th>
                             @endforeach
-                            <th class="px-1 py-1 text-center font-medium text-gray-500 w-10">Dias</th>
+                            <th class="px-1 py-1 text-center font-medium text-gray-500 w-10 bg-gray-50">Dias</th>
                         </tr>
                     </thead>
                     <tbody>
@@ -304,7 +314,7 @@
                                         </form>
                                     @endif
                                 </td>
-                                <td class="px-2 py-1 align-top">
+                                <td class="px-2 py-1 align-top sticky-desc" style="min-width:160px">
                                     <div class="text-xs">{{ $mueble->descripcion }}</div>
                                     <div class="flex gap-1 mt-0.5">
                                         @foreach($procesos as $proceso)

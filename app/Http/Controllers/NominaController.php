@@ -6,6 +6,7 @@ use App\Models\CategoriaNomina;
 
 use App\Models\NominaDiaria;
 use App\Models\Personal;
+use App\Models\Mueble;
 use App\Models\Proyecto;
 use App\Models\Tiempo;
 use Carbon\Carbon;
@@ -52,10 +53,15 @@ class NominaController extends Controller
         $proyectos = Proyecto::where('status', 'activo')->orderBy('nombre')->get();
         $categorias = CategoriaNomina::where('activa', true)->orderBy('nombre')->get();
 
+        $mueblesPorProyecto = Mueble::whereIn('proyecto_id', $proyectos->pluck('id'))
+            ->orderBy('numero')
+            ->get()
+            ->groupBy('proyecto_id');
+
         return view('nomina.semanal', compact(
             'anio', 'semana', 'semanaFin', 'dias', 'empleados', 'registros',
             'proyectos', 'categorias', 'inicioSemana', 'finSemana',
-            'todosEmpleados', 'personalFiltro'
+            'todosEmpleados', 'personalFiltro', 'mueblesPorProyecto'
         ));
     }
 
@@ -66,6 +72,7 @@ class NominaController extends Controller
             'fecha' => 'required|date',
             'asignacion_tipo' => 'nullable|in:proyecto,categoria',
             'asignacion_id' => 'nullable|integer',
+            'mueble_id' => 'nullable|exists:muebles,id',
             'horas_extra' => 'nullable|numeric|min:0|max:24',
             'proyecto_he_id' => 'nullable|exists:proyectos,id',
         ]);
@@ -88,6 +95,7 @@ class NominaController extends Controller
             [
                 'semana' => $fecha->weekOfYear,
                 'proyecto_id' => $proyectoId,
+                'mueble_id' => $proyectoId ? $request->mueble_id : null,
                 'categoria_id' => $categoriaId,
                 'horas_extra' => $request->horas_extra ?? 0,
                 'proyecto_he_id' => $request->proyecto_he_id,
@@ -240,10 +248,58 @@ class NominaController extends Controller
         ksort($costoNoProd);
         ksort($costoHe);
 
+        $proyectosActivos = Proyecto::where('status', 'activo')->orderBy('nombre')
+            ->get()->keyBy('nombre');
+
         return view('nomina.reporte', compact(
             'anio', 'semanaInicio', 'semanaFin', 'semanasConDatos',
-            'costoProyectos', 'costoNoProd', 'costoHe', 'totalGeneral'
+            'costoProyectos', 'costoNoProd', 'costoHe', 'totalGeneral',
+            'proyectosActivos'
         ));
+    }
+
+    public function costoMuebles(Request $request, Proyecto $proyecto)
+    {
+        $anio = $request->integer('anio', now()->year);
+        $semanaInicio = $request->integer('semana_inicio', 1);
+        $semanaFin = $request->integer('semana_fin', now()->weekOfYear);
+
+        $muebles = $proyecto->muebles()->orderBy('numero')->get();
+        $muebleIds = $muebles->pluck('id');
+
+        $registros = NominaDiaria::with('personal')
+            ->whereIn('mueble_id', $muebleIds)
+            ->where('semana', '>=', $semanaInicio)
+            ->where('semana', '<=', $semanaFin)
+            ->whereHas('personal', fn($q) => $q->whereNotNull('nomina_bruta_semanal'))
+            ->get();
+
+        $semanasConDatos = $registros->pluck('semana')->unique()->sort()->values();
+
+        // Build cost per mueble per week
+        $costosPorMueble = [];
+        foreach ($registros as $r) {
+            $mid = $r->mueble_id;
+            $sem = $r->semana;
+            $costo = $r->costo_dia + $r->costo_he;
+            $costosPorMueble[$mid][$sem] = ($costosPorMueble[$mid][$sem] ?? 0) + $costo;
+        }
+
+        return view('nomina.costo-muebles', compact(
+            'proyecto', 'muebles', 'costosPorMueble', 'semanasConDatos',
+            'anio', 'semanaInicio', 'semanaFin'
+        ));
+    }
+
+    public function guardarCostoMueble(Request $request, Mueble $mueble)
+    {
+        $request->validate([
+            'costo_mueble' => 'nullable|numeric|min:0',
+        ]);
+
+        $mueble->update(['costo_mueble' => $request->costo_mueble]);
+
+        return response()->json(['ok' => true, 'costo_mueble' => $mueble->costo_mueble]);
     }
 
     public function exportarReporte(Request $request)

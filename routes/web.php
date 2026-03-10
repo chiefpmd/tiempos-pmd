@@ -22,6 +22,7 @@ Route::post('/logout', [AuthController::class, 'logout'])->name('logout');
 Route::middleware('auth')->group(function () {
     Route::get('/dashboard', [TiempoController::class, 'dashboard'])->name('dashboard');
     Route::get('/general', [TiempoController::class, 'vistaGeneral'])->name('general');
+    Route::get('/gantt-anual', [TiempoController::class, 'ganttAnual'])->name('gantt.anual');
     Route::get('/proyecto/{proyecto}/captura', [TiempoController::class, 'captura'])->name('captura');
 
     Route::get('/proyectos', [ProyectoController::class, 'index'])->name('proyectos.index');
@@ -35,6 +36,7 @@ Route::middleware('auth')->group(function () {
 
     // Admin-only routes
     Route::middleware('admin')->group(function () {
+        Route::post('/gantt-anual/guardar', [TiempoController::class, 'ganttAnualGuardar'])->name('gantt.anual.guardar');
         Route::post('/tiempos/guardar', [TiempoController::class, 'guardar'])->name('tiempos.guardar');
         Route::post('/tiempos/reasignar-equipo', [TiempoController::class, 'reasignarEquipo'])->name('tiempos.reasignarEquipo');
         Route::post('/tiempos/guardar-rango', [TiempoController::class, 'guardarRango'])->name('tiempos.guardarRango');
@@ -66,6 +68,7 @@ Route::middleware('auth')->group(function () {
         // Nómina - guardar y prellenar (admin only)
         Route::post('/nomina/guardar', [NominaController::class, 'guardar'])->name('nomina.guardar');
         Route::post('/nomina/prellenar', [NominaController::class, 'prellenar'])->name('nomina.prellenar');
+        Route::post('/nomina/costo-mueble/{mueble}', [NominaController::class, 'guardarCostoMueble'])->name('nomina.guardarCostoMueble');
 
         // Equipos del día (disabled - using lider_id from personal instead)
         // Route::get('/nomina/equipos', [EquipoDiarioController::class, 'index'])->name('nomina.equipos');
@@ -83,4 +86,5 @@ Route::middleware('auth')->group(function () {
     Route::get('/nomina', [NominaController::class, 'semanal'])->name('nomina.semanal');
     Route::get('/nomina/reporte', [NominaController::class, 'reporte'])->name('nomina.reporte');
     Route::get('/nomina/reporte/exportar', [NominaController::class, 'exportarReporte'])->name('nomina.exportar');
+    Route::get('/nomina/costo-muebles/{proyecto}', [NominaController::class, 'costoMuebles'])->name('nomina.costoMuebles');
 });

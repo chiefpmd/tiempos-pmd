@@ -9,6 +9,7 @@ use App\Models\Mueble;
 use App\Models\Personal;
 use App\Models\Tiempo;
 use App\Models\TiempoShift;
+use App\Models\GanttAnual;
 use Carbon\Carbon;
 use Carbon\CarbonPeriod;
 use Illuminate\Http\Request;
@@ -493,6 +494,81 @@ class TiempoController extends Controller
         }
 
         return $resultado;
+    }
+
+    public function ganttAnual(Request $request)
+    {
+        $anio = (int) $request->input('anio', Carbon::now()->year);
+
+        $proyectos = Proyecto::whereIn('status', ['activo', 'completado', 'pausado'])
+            ->with('ganttAnual')
+            ->orderBy('fecha_inicio')
+            ->get();
+
+        // Build gantt data map: proyecto_id => {fecha_inicio, fecha_fin}
+        $ganttData = [];
+        foreach ($proyectos as $p) {
+            if ($p->ganttAnual) {
+                $ganttData[$p->id] = [
+                    'fecha_inicio' => $p->ganttAnual->fecha_inicio,
+                    'fecha_fin' => $p->ganttAnual->fecha_fin,
+                ];
+            } else {
+                $ganttData[$p->id] = [
+                    'fecha_inicio' => null,
+                    'fecha_fin' => null,
+                ];
+            }
+        }
+
+        // Build weeks structure for the year
+        $meses = [];
+        for ($m = 1; $m <= 12; $m++) {
+            $mesInicio = Carbon::create($anio, $m, 1);
+            $mesFin = $mesInicio->copy()->endOfMonth();
+            $semanas = [];
+            $semanaInicio = $mesInicio->copy()->startOfWeek(Carbon::MONDAY);
+            while ($semanaInicio->lte($mesFin)) {
+                $semanaFin = $semanaInicio->copy()->endOfWeek(Carbon::FRIDAY);
+                if ($semanaFin->gte($mesInicio) && $semanaInicio->lte($mesFin)) {
+                    $semanas[] = [
+                        'inicio' => $semanaInicio->copy(),
+                        'fin' => $semanaFin->copy(),
+                        'label' => $semanaInicio->day . '-' . min($semanaFin->day, $mesFin->day),
+                    ];
+                }
+                $semanaInicio->addWeek();
+            }
+            $meses[] = [
+                'nombre' => ucfirst($mesInicio->translatedFormat('M')),
+                'num' => $m,
+                'semanas' => $semanas,
+            ];
+        }
+
+        $totalSemanas = collect($meses)->sum(fn($m) => count($m['semanas']));
+
+        $colores = ['#3b82f6','#ef4444','#10b981','#f59e0b','#8b5cf6','#ec4899','#06b6d4','#84cc16','#f97316','#6366f1','#14b8a6','#e11d48'];
+
+        $isAdmin = auth()->user()->isAdmin();
+
+        return view('tiempos.gantt-anual', compact('proyectos', 'meses', 'totalSemanas', 'anio', 'colores', 'ganttData', 'isAdmin'));
+    }
+
+    public function ganttAnualGuardar(Request $request)
+    {
+        $data = $request->validate([
+            'proyecto_id' => 'required|exists:proyectos,id',
+            'fecha_inicio' => 'required|date',
+            'fecha_fin' => 'required|date|after_or_equal:fecha_inicio',
+        ]);
+
+        GanttAnual::updateOrCreate(
+            ['proyecto_id' => $data['proyecto_id']],
+            ['fecha_inicio' => $data['fecha_inicio'], 'fecha_fin' => $data['fecha_fin']]
+        );
+
+        return response()->json(['ok' => true]);
     }
 
     public function vistaGeneral(Request $request)

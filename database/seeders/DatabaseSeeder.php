@@ -13,15 +13,25 @@ class DatabaseSeeder extends Seeder
 {
     public function run(): void
     {
-        User::firstOrCreate(['email' => 'admin@pmd.com'], [
-            'name' => 'Administrador',
+        User::firstOrCreate(['name' => 'Julien'], [
+            'email' => 'julien@pmd.com',
             'role' => 'admin',
             'password' => Hash::make('admin123'),
         ]);
-        User::firstOrCreate(['email' => 'viewer@pmd.com'], [
-            'name' => 'Consulta',
+        User::firstOrCreate(['name' => 'Blas'], [
+            'email' => 'blas@pmd.com',
             'role' => 'viewer',
-            'password' => Hash::make('viewer123'),
+            'password' => Hash::make('blas123'),
+        ]);
+        User::firstOrCreate(['name' => 'Andrea'], [
+            'email' => 'andrea@pmd.com',
+            'role' => 'viewer',
+            'password' => Hash::make('andrea123'),
+        ]);
+        User::firstOrCreate(['name' => 'Aldo'], [
+            'email' => 'aldo@pmd.com',
+            'role' => 'viewer',
+            'password' => Hash::make('aldo123'),
         ]);
 
         $equipos = [

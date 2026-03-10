@@ -10,7 +10,7 @@ class NominaDiaria extends Model
 
     protected $fillable = [
         'personal_id', 'fecha', 'semana',
-        'proyecto_id', 'categoria_id',
+        'proyecto_id', 'mueble_id', 'categoria_id',
         'horas_extra', 'proyecto_he_id',
     ];
 
@@ -32,6 +32,11 @@ class NominaDiaria extends Model
     public function categoria()
     {
         return $this->belongsTo(CategoriaNomina::class, 'categoria_id');
+    }
+
+    public function mueble()
+    {
+        return $this->belongsTo(Mueble::class);
     }
 
     public function proyectoHe()
