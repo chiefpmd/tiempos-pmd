@@ -10,17 +10,17 @@
     .festivo { background-color: #f3e8ff; }
     .festivo-header { background-color: #e9d5ff; color: #7c3aed; }
     .nomina-proyecto { background-color: #fffbeb; }
-    .today-col { box-shadow: inset 0 0 0 2px #ef4444; }
-    .today-header { background-color: #fef2f2 !important; color: #dc2626 !important; font-weight: bold; }
+    .today-col { background-color: #eff6ff; }
+    .today-header { background-color: #dbeafe !important; color: #1e40af !important; font-weight: bold; }
     .proj-tag {
         display: inline-block; padding: 1px 4px; border-radius: 3px;
         font-size: 10px; line-height: 16px; font-weight: 600; color: #fff;
         letter-spacing: 0.3px;
     }
     .cap-cell { font-size: 12px; font-weight: 600; text-align: center; padding: 4px 8px; }
-    .cap-high { background-color: #dbeafe; color: #1e40af; }
-    .cap-med { background-color: #fef3c7; color: #92400e; }
-    .cap-zero { background-color: #f9fafb; color: #d1d5db; }
+    .cap-high { color: #374151; }
+    .cap-med { color: #374151; }
+    .cap-zero { color: #d1d5db; }
     .cap-free { color: #16a34a; font-weight: 700; }
     .cap-none { color: #dc2626; font-weight: 700; }
 </style>
@@ -97,73 +97,82 @@
         </div>
     </div>
 
-    {{-- ===== PEOPLE PER PROJECT PER WEEK ===== --}}
+    {{-- ===== PEOPLE PER PROJECT PER WEEK (by process) ===== --}}
+    @php
+        $procesoLabels = ['Carpintería' => 'Carp.', 'Barniz' => 'Barniz', 'Instalación' => 'Inst.'];
+        $procesoColoresTab = ['Carpintería' => '#f59e0b', 'Barniz' => '#10b981', 'Instalación' => '#3b82f6'];
+        $totalesPorProceso = []; // proceso => [semana => total]
+        foreach (['Carpintería', 'Barniz', 'Instalación'] as $proc) {
+            foreach ($semanasNums as $sem) {
+                $sum = 0;
+                foreach ($proyectos as $proy) {
+                    $sum += $proyectoCapacidadProceso[$proy->nombre][$proc][$sem] ?? 0;
+                }
+                $totalesPorProceso[$proc][$sem] = $sum;
+            }
+        }
+    @endphp
     <div class="mb-5">
         <h2 class="text-sm font-bold mb-2 text-gray-700">Personas por Proyecto por Semana</h2>
         <div class="bg-white rounded-lg shadow overflow-x-auto">
             <table class="min-w-full text-xs">
                 <thead class="bg-gray-50">
                     <tr>
-                        <th class="px-3 py-2 text-left font-medium text-gray-500 sticky left-0 bg-gray-50 z-10 w-36">Proyecto</th>
+                        <th class="px-3 py-2 text-left font-medium text-gray-500 sticky left-0 bg-gray-50 z-10">Proyecto</th>
+                        <th class="px-1 py-2 text-right font-medium text-gray-500 sticky bg-gray-50 z-10" style="left: auto;">Proc.</th>
                         @foreach($semanasNums as $sem)
                             <th class="cap-cell text-gray-500 {{ $sem == now()->weekOfYear ? 'today-header' : '' }}">S{{ $sem }}</th>
                         @endforeach
                     </tr>
                 </thead>
-                <tbody class="divide-y divide-gray-100">
+                <tbody>
                     @foreach($proyectos as $proy)
-                    <tr>
-                        <td class="px-3 py-2 font-medium sticky left-0 bg-white z-10 whitespace-nowrap">
-                            <span class="proj-tag" style="background-color: {{ $proyectoColores[$proy->nombre] ?? '#6b7280' }}">{{ $proyectoAbrev[$proy->nombre] ?? $proy->nombre }}</span>
-                            <span class="text-gray-500 ml-1">{{ $proy->nombre }}</span>
-                        </td>
-                        @foreach($semanasNums as $sem)
-                            @php
-                                $count = $proyectoCapacidad[$proy->nombre][$sem] ?? 0;
-                                $cellClass = $count >= 5 ? 'cap-high' : ($count > 0 ? 'cap-med' : 'cap-zero');
-                            @endphp
-                            <td class="cap-cell {{ $cellClass }} {{ $sem == now()->weekOfYear ? 'today-col' : '' }}">
-                                {{ $count ?: '-' }}
+                        @foreach(['Carpintería', 'Barniz', 'Instalación'] as $pi => $proc)
+                        <tr class="{{ $pi === 0 ? 'border-t-2 border-gray-300' : '' }}">
+                            <td class="px-3 py-1 sticky left-0 bg-white z-10 whitespace-nowrap">
+                                @if($pi === 0)
+                                    <span class="proj-tag" style="background-color: {{ $proyectoColores[$proy->nombre] ?? '#6b7280' }}">{{ $proyectoAbrev[$proy->nombre] ?? $proy->nombre }}</span>
+                                    <span class="text-gray-500 ml-1">{{ $proy->nombre }}</span>
+                                @endif
                             </td>
+                            <td class="px-1 py-1 text-right bg-white z-10 whitespace-nowrap">
+                                <span class="text-[10px]" style="color: {{ $procesoColoresTab[$proc] }}; font-weight: 600;">{{ $procesoLabels[$proc] }}</span>
+                            </td>
+                            @foreach($semanasNums as $sem)
+                                @php
+                                    $count = $proyectoCapacidadProceso[$proy->nombre][$proc][$sem] ?? 0;
+                                    $cellClass = $count >= 5 ? 'cap-high' : ($count > 0 ? 'cap-med' : 'cap-zero');
+                                @endphp
+                                <td class="cap-cell {{ $cellClass }} {{ $sem == now()->weekOfYear ? 'today-col' : '' }}">
+                                    {{ $count ?: '-' }}
+                                </td>
+                            @endforeach
+                        </tr>
                         @endforeach
-                    </tr>
                     @endforeach
-                </tbody>
-            </table>
-        </div>
-    </div>
-
-    {{-- ===== DEPARTMENT CAPACITY PER WEEK ===== --}}
-    <div class="mb-5">
-        <h2 class="text-sm font-bold mb-2 text-gray-700">Capacidad por Departamento por Semana <span class="font-normal text-gray-400">(asignados / total — libres)</span></h2>
-        <div class="bg-white rounded-lg shadow overflow-x-auto">
-            <table class="min-w-full text-xs">
-                <thead class="bg-gray-50">
-                    <tr>
-                        <th class="px-3 py-2 text-left font-medium text-gray-500 sticky left-0 bg-gray-50 z-10 w-36">Departamento</th>
-                        @foreach($semanasNums as $sem)
-                            <th class="cap-cell text-gray-500 {{ $sem == now()->weekOfYear ? 'today-header' : '' }}">S{{ $sem }}</th>
-                        @endforeach
-                    </tr>
-                </thead>
-                <tbody class="divide-y divide-gray-100">
-                    @foreach($deptCapacidad as $equipo => $semanaData)
-                    <tr>
-                        <td class="px-3 py-2 font-medium sticky left-0 bg-white z-10 whitespace-nowrap">
-                            {{ $equipo }}
-                            <span class="text-[10px] text-gray-400">({{ $deptTotals[$equipo] ?? 0 }})</span>
+                    {{-- Totals per process --}}
+                    @foreach(['Carpintería', 'Barniz', 'Instalación'] as $proc)
+                    <tr class="{{ $proc === 'Carpintería' ? 'border-t-4 border-gray-400' : 'border-t border-gray-200' }}" style="background-color: {{ $procesoColoresTab[$proc] }}15;">
+                        <td class="px-3 py-1 font-bold sticky left-0 z-10 whitespace-nowrap" style="background-color: {{ $procesoColoresTab[$proc] }}15;">
+                            <span style="color: {{ $procesoColoresTab[$proc] }};">Total</span>
+                            <span class="text-[10px] text-gray-400 ml-1">({{ $deptTotals[$proc] ?? '?' }})</span>
+                        </td>
+                        <td class="px-1 py-1 text-right z-10 whitespace-nowrap" style="background-color: {{ $procesoColoresTab[$proc] }}15;">
+                            <span class="text-[10px] font-bold" style="color: {{ $procesoColoresTab[$proc] }};">{{ $procesoLabels[$proc] }}</span>
                         </td>
                         @foreach($semanasNums as $sem)
                             @php
-                                $data = $semanaData[$sem] ?? ['asignados' => 0, 'total' => $deptTotals[$equipo] ?? 0, 'libres' => $deptTotals[$equipo] ?? 0];
-                                $libres = $data['libres'];
+                                $total = $totalesPorProceso[$proc][$sem];
+                                $disponibles = ($deptTotals[$proc] ?? 0) - $total;
                             @endphp
-                            <td class="cap-cell {{ $sem == now()->weekOfYear ? 'today-col' : '' }}" title="{{ $data['asignados'] }} asignados de {{ $data['total'] }} — {{ $libres }} libres">
-                                <span class="text-gray-600">{{ $data['asignados'] }}</span><span class="text-gray-300">/{{ $data['total'] }}</span>
-                                @if($libres > 0)
-                                    <div class="text-[9px] cap-free">{{ $libres }} libre{{ $libres > 1 ? 's' : '' }}</div>
-                                @else
+                            <td class="cap-cell {{ $sem == now()->weekOfYear ? 'today-col' : '' }}" style="background-color: {{ $disponibles < 0 ? '#fef2f2' : $procesoColoresTab[$proc] . '15' }};">
+                                <span class="font-bold" style="color: {{ $disponibles < 0 ? '#dc2626' : $procesoColoresTab[$proc] }};">{{ $total }}</span>
+                                @if($disponibles > 0)
+                                    <div class="text-[9px] cap-free">{{ $disponibles }} disp.</div>
+                                @elseif($disponibles == 0 && ($deptTotals[$proc] ?? 0) > 0)
                                     <div class="text-[9px] cap-none">lleno</div>
+                                @else
+                                    <div class="text-[9px] cap-none">{{ $disponibles }} faltan</div>
                                 @endif
                             </td>
                         @endforeach

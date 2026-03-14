@@ -3,7 +3,7 @@
 
 @push('styles')
 <style>
-    .gen-cell { min-width: 36px; font-size: 11px; padding: 1px; }
+    .gen-cell { min-width: 36px; font-size: 11px; padding: 1px; border-right: 1px solid rgba(209,213,219,0.5); }
     .mueble-sep { border-top: 2px solid #d1d5db; }
     .proyecto-sep { border-top: 3px solid #6b7280; }
 
@@ -26,7 +26,7 @@
     .mat-entrega-header { border-right: 3px solid #dc2626 !important; }
 
     /* Gantt row: 3 stacked bars */
-    tr.gantt-row { position: relative; height: 42px; }
+    tr.gantt-row { position: relative; height: 48px; }
     .gantt-bar {
         position: absolute;
         border-radius: 3px;
@@ -42,17 +42,17 @@
         min-width: 4px;
         font-size: 9px;
         font-weight: bold;
-        color: #fff;
-        text-shadow: 0 0 2px rgba(0,0,0,0.4);
+        color: #1f2937;
+        text-shadow: 0 0 3px rgba(255,255,255,0.8);
         overflow: hidden;
         white-space: nowrap;
         transition: box-shadow 0.15s;
     }
     .gantt-bar:hover { box-shadow: 0 2px 8px rgba(0,0,0,0.3); z-index: 10; }
     .gantt-bar.dragging { cursor: grabbing; opacity: 0.7; }
-    .gantt-bar[data-slot="0"] { top: 1px; height: 12px; }
-    .gantt-bar[data-slot="1"] { top: 15px; height: 12px; }
-    .gantt-bar[data-slot="2"] { top: 29px; height: 12px; }
+    .gantt-bar[data-slot="0"] { top: 1px; height: 14px; }
+    .gantt-bar[data-slot="1"] { top: 17px; height: 14px; }
+    .gantt-bar[data-slot="2"] { top: 33px; height: 14px; }
     .gantt-handle {
         position: absolute; top: 0; width: 6px; height: 100%;
         cursor: col-resize; z-index: 6;
@@ -96,6 +96,30 @@
     .assign-row { display: flex; align-items: center; gap: 4px; margin-bottom: 4px; }
     .assign-row label { font-size: 10px; font-weight: 600; min-width: 70px; }
     .assign-row select { font-size: 11px; flex: 1; }
+
+    /* Fecha entrega mueble */
+    .fecha-entrega-cell { background-color: rgba(249,115,22,0.25) !important; }
+    .fecha-entrega-marker {
+        position: absolute; right: -1px; top: 0; bottom: 0; width: 3px;
+        background: #f97316; z-index: 4;
+    }
+
+    /* Fecha entrega popup */
+    #fecha-entrega-popup {
+        display: none; position: fixed; z-index: 100; background: #fff; border: 2px solid #f97316;
+        border-radius: 6px; padding: 8px; box-shadow: 0 4px 12px rgba(0,0,0,0.3); font-size: 12px;
+    }
+    #fecha-entrega-popup.active { display: flex; align-items: center; gap: 6px; }
+    #fecha-entrega-popup input[type="date"] {
+        border: 1px solid #d1d5db; border-radius: 4px; padding: 2px 6px; font-size: 12px;
+    }
+    #fecha-entrega-popup button {
+        border: none; border-radius: 4px; padding: 3px 10px; cursor: pointer; font-size: 11px; color: #fff;
+    }
+    #fecha-entrega-popup .save-btn { background: #f97316; }
+    #fecha-entrega-popup .save-btn:hover { background: #ea580c; }
+    #fecha-entrega-popup .clear-btn { background: #9ca3af; }
+    #fecha-entrega-popup .cancel-btn { background: #d1d5db; color: #374151; }
 </style>
 @endpush
 
@@ -123,7 +147,8 @@
         <span class="flex items-center"><span class="proc-dot proc-dot-carp"></span> Carpinteria</span>
         <span class="flex items-center"><span class="proc-dot proc-dot-barn"></span> Barniz</span>
         <span class="flex items-center"><span class="proc-dot proc-dot-inst"></span> Instalacion</span>
-        <span class="text-gray-400 ml-4">Arrastra para mover | Bordes para redimensionar | Click derecho para asignar equipo</span>
+        <span class="flex items-center ml-2"><span style="display:inline-block;width:12px;height:8px;background:rgba(249,115,22,0.35);border-right:3px solid #f97316;margin-right:3px;"></span> Fecha entrega</span>
+        <span class="text-gray-400 ml-4">Arrastra para mover | Bordes para redimensionar | Click derecho para asignar equipo | Doble click en celda para fecha entrega</span>
     </div>
 
     @if($proyectos->isEmpty())
@@ -168,6 +193,11 @@
             </form>
             @endif
 
+            @php
+                $matPedido = $proyecto->materiales->where('tipo', 'pedido')->first();
+                $matEntrega = $proyecto->materiales->where('tipo', 'entrega')->first();
+            @endphp
+
             @if($isAdmin)
             <div class="shift-form items-center space-x-2 mb-2 bg-purple-50 p-2 rounded shadow-sm" id="shift-form-{{ $proyecto->id }}" style="display:none">
                 <div class="flex items-center space-x-2 flex-wrap gap-y-1">
@@ -208,10 +238,6 @@
                 @endif
             </div>
 
-            @php
-                $matPedido = $proyecto->materiales->where('tipo', 'pedido')->first();
-                $matEntrega = $proyecto->materiales->where('tipo', 'entrega')->first();
-            @endphp
             <div class="materiales-form mb-2 bg-red-50 p-2 rounded shadow-sm" id="materiales-form-{{ $proyecto->id }}" style="display:none">
                 <div class="flex items-center space-x-4">
                     <div class="flex items-center space-x-2">
@@ -304,6 +330,7 @@
                                 data-mueble-id="{{ $mueble->id }}"
                                 data-proyecto-id="{{ $proyecto->id }}"
                                 data-procs='@json($muebleProcs)'
+                                data-fecha-entrega="{{ $mueble->fecha_entrega?->format('Y-m-d') ?? '' }}"
                             >
                                 <td class="px-2 py-1 font-medium sticky left-0 bg-white z-10 align-top">
                                     {{ $mueble->numero }}
@@ -391,6 +418,13 @@
     <input type="number" id="edit-personas-input" min="0.5" max="24" step="0.5" value="1">
     <button id="edit-personas-save">OK</button>
     <button class="cancel-btn" id="edit-personas-cancel">X</button>
+</div>
+<div id="fecha-entrega-popup">
+    <span style="font-weight:600; color:#f97316;">Entrega:</span>
+    <input type="date" id="fecha-entrega-input">
+    <button class="save-btn" id="fecha-entrega-save">OK</button>
+    <button class="clear-btn" id="fecha-entrega-clear">Quitar</button>
+    <button class="cancel-btn" id="fecha-entrega-cancel">X</button>
 </div>
 @endsection
 
@@ -575,9 +609,11 @@ document.addEventListener('DOMContentLoaded', function() {
             bar.dataset.color = color;
             bar.dataset.personas = data.personas || 1;
 
-            // Label: process initial + personas count
-            const initial = proceso.charAt(0);
-            bar.textContent = initial + (data.personas > 0 ? ' ' + data.personas : '');
+            // Label: process abbreviation + personas count
+            const procesoLabels = { 'Carpintería': 'Carp.', 'Barniz': 'Barniz', 'Instalación': 'Inst.' };
+            const label = procesoLabels[proceso] || proceso.charAt(0);
+            const pVal = data.personas % 1 === 0 ? Math.round(data.personas) : data.personas;
+            bar.textContent = label + (data.personas > 0 ? ' ' + pVal : '');
 
             const handleLeft = document.createElement('div');
             handleLeft.className = 'gantt-handle gantt-handle-left';
@@ -879,8 +915,10 @@ document.addEventListener('DOMContentLoaded', function() {
         .then(data => {
             if (data.ok || data.success) {
                 bar.dataset.personas = newPersonas;
-                const initial = bar.dataset.proceso.charAt(0);
-                bar.childNodes[0].textContent = initial + (newPersonas > 0 ? ' ' + newPersonas : '');
+                const procesoLabels2 = { 'Carpintería': 'Carp.', 'Barniz': 'Barniz', 'Instalación': 'Inst.' };
+                const label2 = procesoLabels2[bar.dataset.proceso] || bar.dataset.proceso.charAt(0);
+                const pVal2 = newPersonas % 1 === 0 ? Math.round(newPersonas) : newPersonas;
+                bar.childNodes[0].textContent = label2 + (newPersonas > 0 ? ' ' + pVal2 : '');
                 bar.style.backgroundColor = bar.dataset.color + 'AA';
             } else {
                 alert('Error: ' + (data.error || JSON.stringify(data)));
@@ -944,6 +982,91 @@ document.addEventListener('DOMContentLoaded', function() {
                 this.textContent = 'Crear';
             });
         });
+    });
+    // ========== FECHA ENTREGA POR MUEBLE ==========
+    function paintFechaEntrega(row) {
+        const fechaEntrega = row.dataset.fechaEntrega;
+        // Clear previous
+        row.querySelectorAll('.fecha-entrega-cell').forEach(c => c.classList.remove('fecha-entrega-cell'));
+        row.querySelectorAll('.fecha-entrega-marker').forEach(m => m.remove());
+        if (!fechaEntrega) return;
+        const cell = row.querySelector('td.day-cell[data-date="' + fechaEntrega + '"]');
+        if (cell) {
+            cell.classList.add('fecha-entrega-cell');
+            cell.style.position = 'relative';
+            const marker = document.createElement('div');
+            marker.className = 'fecha-entrega-marker';
+            cell.appendChild(marker);
+        }
+    }
+
+    // Paint all on load
+    document.querySelectorAll('tr.gantt-row[data-mueble-id]').forEach(paintFechaEntrega);
+
+    // Double-click on day cell to set fecha entrega
+    const fePopup = document.getElementById('fecha-entrega-popup');
+    const feInput = document.getElementById('fecha-entrega-input');
+    let feCurrentRow = null;
+
+    document.querySelectorAll('tr.gantt-row[data-mueble-id]').forEach(row => {
+        row.querySelectorAll('td.day-cell').forEach(cell => {
+            cell.addEventListener('dblclick', function(e) {
+                e.preventDefault();
+                e.stopPropagation();
+                feCurrentRow = row;
+                feInput.value = row.dataset.fechaEntrega || cell.dataset.date;
+                fePopup.classList.add('active');
+                fePopup.style.left = Math.min(e.clientX, window.innerWidth - 300) + 'px';
+                fePopup.style.top = Math.min(e.clientY - 10, window.innerHeight - 50) + 'px';
+            });
+        });
+    });
+
+    document.getElementById('fecha-entrega-save').addEventListener('click', function() {
+        if (!feCurrentRow) return;
+        const muebleId = feCurrentRow.dataset.muebleId;
+        const fecha = feInput.value;
+        fetch('/muebles/' + muebleId + '/fecha-entrega', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'X-CSRF-TOKEN': csrfToken },
+            body: JSON.stringify({ fecha_entrega: fecha || null })
+        })
+        .then(r => r.json())
+        .then(data => {
+            if (data.ok) {
+                feCurrentRow.dataset.fechaEntrega = fecha;
+                paintFechaEntrega(feCurrentRow);
+            }
+        });
+        fePopup.classList.remove('active');
+    });
+
+    document.getElementById('fecha-entrega-clear').addEventListener('click', function() {
+        if (!feCurrentRow) return;
+        const muebleId = feCurrentRow.dataset.muebleId;
+        fetch('/muebles/' + muebleId + '/fecha-entrega', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'X-CSRF-TOKEN': csrfToken },
+            body: JSON.stringify({ fecha_entrega: null })
+        })
+        .then(r => r.json())
+        .then(data => {
+            if (data.ok) {
+                feCurrentRow.dataset.fechaEntrega = '';
+                paintFechaEntrega(feCurrentRow);
+            }
+        });
+        fePopup.classList.remove('active');
+    });
+
+    document.getElementById('fecha-entrega-cancel').addEventListener('click', function() {
+        fePopup.classList.remove('active');
+    });
+
+    document.addEventListener('click', function(e) {
+        if (fePopup.classList.contains('active') && !fePopup.contains(e.target)) {
+            fePopup.classList.remove('active');
+        }
     });
 });
 </script>

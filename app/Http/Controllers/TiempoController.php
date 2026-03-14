@@ -284,17 +284,32 @@ class TiempoController extends Controller
             ->with('proyecto')
             ->get();
 
-        // Build per-person per-day: project => personas count (from tiempos horas)
-        // personId_date => [ projectName => personas ]
+        // Build per-person per-day: project/process => personas count
+        // Sum horas across muebles (1 persona per mueble = N personas total)
         $personDayProject = [];
+        $personDayProjectProceso = [];
+        $muebleHoras = []; // [personalId][date][projName][proceso][muebleId] => max horas
         foreach ($allTiempos as $t) {
-            $key = $t->personal_id . '_' . $t->fecha->format('Y-m-d');
+            $fechaStr = $t->fecha->format('Y-m-d');
             $projName = $t->mueble->proyecto->nombre;
-            // Use max horas per person per project per day (horas = team size)
-            $personDayProject[$key][$projName] = max(
-                $personDayProject[$key][$projName] ?? 0,
+            $muebleHoras[$t->personal_id][$fechaStr][$projName][$t->proceso][$t->mueble_id] = max(
+                $muebleHoras[$t->personal_id][$fechaStr][$projName][$t->proceso][$t->mueble_id] ?? 0,
                 $t->horas
             );
+        }
+        foreach ($muebleHoras as $personalId => $fechas) {
+            foreach ($fechas as $fechaStr => $proyectos_data) {
+                $key = $personalId . '_' . $fechaStr;
+                foreach ($proyectos_data as $projName => $procesos_data) {
+                    $totalProj = 0;
+                    foreach ($procesos_data as $proceso => $muebles) {
+                        $sumProceso = array_sum($muebles);
+                        $personDayProjectProceso[$key][$projName][$proceso] = $sumProceso;
+                        $totalProj += $sumProceso;
+                    }
+                    $personDayProject[$key][$projName] = $totalProj;
+                }
+            }
         }
         foreach ($allNomina as $n) {
             $key = $n->personal_id . '_' . $n->fecha->format('Y-m-d');
@@ -306,59 +321,51 @@ class TiempoController extends Controller
         // Group days by week
         $semanas = collect($diasHabiles)->groupBy(fn($d) => $d->weekOfYear);
 
-        // Project capacity: total personas per project per week
-        $proyectoCapacidad = []; // proyectoNombre => [semana => totalPersonas]
-        // Department capacity: assigned vs total per dept per week
-        $deptCapacidad = []; // equipo => [semana => ['asignados' => count, 'total' => count]]
+        // Project capacity per process: projName => proceso => [semana => totalPersonas]
+        $proyectoCapacidadProceso = [];
+        $procesos = ['Carpintería', 'Barniz', 'Instalación'];
 
         foreach ($semanas as $numSemana => $diasSemana) {
-            // For project capacity: per leader, take their max personas for the week
-            // Then sum across leaders
-            $leaderMaxPerProject = []; // projName => [personalId => maxPersonas]
+            $leaderMaxPerProjectProceso = []; // projName => proceso => [personalId => maxPersonas]
             $personasAsignadasPorDept = []; // equipo => [personIds]
 
             foreach ($diasSemana as $dia) {
                 $fechaStr = $dia->format('Y-m-d');
                 foreach ($todosActivos as $p) {
                     $key = $p->id . '_' . $fechaStr;
-                    $proyectos_dia = $personDayProject[$key] ?? [];
 
-                    foreach ($proyectos_dia as $projNombre => $personas) {
-                        $leaderMaxPerProject[$projNombre][$p->id] = max(
-                            $leaderMaxPerProject[$projNombre][$p->id] ?? 0,
-                            $personas
-                        );
+                    // Per-process tracking
+                    $proyectosProceso = $personDayProjectProceso[$key] ?? [];
+                    foreach ($proyectosProceso as $projNombre => $procData) {
+                        foreach ($procData as $proc => $personas) {
+                            $leaderMaxPerProjectProceso[$projNombre][$proc][$p->id] = max(
+                                $leaderMaxPerProjectProceso[$projNombre][$proc][$p->id] ?? 0,
+                                $personas
+                            );
+                        }
                     }
 
+                    $proyectos_dia = $personDayProject[$key] ?? [];
                     if (!empty($proyectos_dia)) {
                         $personasAsignadasPorDept[$p->equipo][$p->id] = true;
                     }
                 }
             }
 
-            // Sum personas across all leaders for each project
-            foreach ($leaderMaxPerProject as $projNombre => $leaders) {
-                $proyectoCapacidad[$projNombre][$numSemana] = (int) array_sum($leaders);
-            }
-
-            foreach ($deptTotals as $equipo => $total) {
-                $asignados = isset($personasAsignadasPorDept[$equipo]) ? count($personasAsignadasPorDept[$equipo]) : 0;
-                $deptCapacidad[$equipo][$numSemana] = [
-                    'asignados' => $asignados,
-                    'total' => $total,
-                    'libres' => $total - $asignados,
-                ];
+            foreach ($leaderMaxPerProjectProceso as $projNombre => $procData) {
+                foreach ($procData as $proc => $leaders) {
+                    $proyectoCapacidadProceso[$projNombre][$proc][$numSemana] = (int) array_sum($leaders);
+                }
             }
         }
 
-        ksort($proyectoCapacidad);
-        ksort($deptCapacidad);
+        ksort($proyectoCapacidadProceso);
 
         $semanasNums = $semanas->keys()->sort()->values();
 
         return view('tiempos.dashboard', compact(
             'personal', 'diasHabiles', 'disponibilidad', 'proyectos', 'festivos',
-            'teamCounts', 'proyectoCapacidad', 'deptCapacidad', 'deptTotals', 'semanasNums',
+            'teamCounts', 'proyectoCapacidadProceso', 'deptTotals', 'semanasNums',
             'canGoBack', 'prevDesde', 'nextDesde', 'todayDesde', 'allDesde'
         ));
     }

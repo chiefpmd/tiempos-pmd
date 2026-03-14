@@ -23,4 +23,13 @@ class MuebleController extends Controller
         $mueble->delete();
         return back()->with('success', 'Mueble eliminado.');
     }
+
+    public function guardarFechaEntrega(Request $request, Mueble $mueble)
+    {
+        $data = $request->validate([
+            'fecha_entrega' => 'nullable|date',
+        ]);
+        $mueble->update($data);
+        return response()->json(['ok' => true]);
+    }
 }
