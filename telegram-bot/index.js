@@ -2,6 +2,8 @@ require('dotenv').config();
 const TelegramBot = require('node-telegram-bot-api');
 const db = require('./db');
 
+const { askClaude } = require('./ai');
+
 const bot = new TelegramBot(process.env.TELEGRAM_BOT_TOKEN, { polling: true });
 const CHAT_ID = process.env.TELEGRAM_CHAT_ID;
 
@@ -379,4 +381,26 @@ bot.onText(/\/reporte/, async (msg) => {
   }
 });
 
-console.log('Tiempos PMD Bot activo');
+// Natural language handler - catches any text that isn't a command
+bot.on('message', async (msg) => {
+  if (!isAuth(msg)) return;
+  if (!msg.text || msg.text.startsWith('/')) return;
+
+  try {
+    bot.sendChatAction(msg.chat.id, 'typing');
+    const response = await askClaude(msg.text);
+    // Telegram max message length is 4096
+    if (response.length > 4000) {
+      const chunks = response.match(/.{1,4000}/gs);
+      for (const chunk of chunks) {
+        await bot.sendMessage(msg.chat.id, chunk);
+      }
+    } else {
+      bot.sendMessage(msg.chat.id, response);
+    }
+  } catch (e) {
+    bot.sendMessage(msg.chat.id, 'Error AI: ' + e.message);
+  }
+});
+
+console.log('Tiempos PMD Bot activo (con IA)');

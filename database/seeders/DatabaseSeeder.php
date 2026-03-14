@@ -33,6 +33,10 @@ class DatabaseSeeder extends Seeder
             'role' => 'viewer',
             'password' => Hash::make('aldo123'),
         ]);
+        User::firstOrCreate(['name' => 'Jose'], [
+            'role' => 'viewer',
+            'password' => Hash::make('jose123'),
+        ]);
 
         $equipos = [
             ['nombre' => 'Anibal', 'equipo' => 'Carpintería', 'color_hex' => '#4A90D9'],
