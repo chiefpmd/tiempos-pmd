@@ -13,6 +13,8 @@
 /.zed
 /auth.json
 /node_modules
+telegram-bot/node_modules
+telegram-bot/.env
 /public/build
 /public/hot
 /public/storage
