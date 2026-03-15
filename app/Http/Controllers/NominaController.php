@@ -282,37 +282,69 @@ class NominaController extends Controller
             $costoNominaPorSemana[$sem] = ($costoNominaPorSemana[$sem] ?? 0) + $r->costo_dia + $r->costo_he;
         }
 
-        // 3. Valor producido per week: mueble cuenta como "producido" en la
-        //    última semana que tiene registro de Barniz (cuando sale del taller)
+        // 3. Valor producido per week: 25% del costo_mueble corresponde a nómina,
+        //    repartido proporcionalmente por jornales trabajados en cada semana
+        $PORCENTAJE_NOMINA = 0.25;
         $valorProducidoPorSemana = [];
         $inicioGeneral = Carbon::now()->setISODate($anio, $semanaInicio, 1);
         $finGeneral = Carbon::now()->setISODate($anio, $semanaFin, 7);
 
-        // Buscar última fecha de Barniz por mueble en el periodo
+        // Jornales por mueble por semana (de nomina_diaria con proyecto asignado)
+        $jornalesPorMuebleSemana = [];
+        $jornalesTotalPorMueble = [];
+        foreach ($registros as $r) {
+            if (!$r->mueble_id || !$r->proyecto_id) continue;
+            $mid = $r->mueble_id;
+            $sem = $r->semana;
+            $jornalesPorMuebleSemana[$mid][$sem] = ($jornalesPorMuebleSemana[$mid][$sem] ?? 0) + 1;
+            $jornalesTotalPorMueble[$mid] = ($jornalesTotalPorMueble[$mid] ?? 0) + 1;
+        }
+
+        // Para cada mueble con costo, repartir el 25% entre semanas según jornales
+        // También calcular nómina solo de muebles con valor (para eficiencia semanal)
+        $muebleIdsConJornales = array_keys($jornalesTotalPorMueble);
+        $costoNominaEficiencia = []; // solo nómina de muebles con costo_mueble
+        $mueblesConCostoIds = [];
+        if (!empty($muebleIdsConJornales)) {
+            $mueblesConCosto = Mueble::whereIn('id', $muebleIdsConJornales)
+                ->whereNotNull('costo_mueble')
+                ->where('costo_mueble', '>', 0)
+                ->get()
+                ->keyBy('id');
+
+            $mueblesConCostoIds = $mueblesConCosto->keys()->toArray();
+
+            foreach ($mueblesConCosto as $mid => $mueble) {
+                $valorNomina = $mueble->costo_mueble * $PORCENTAJE_NOMINA;
+                $totalJornalesMueble = $jornalesTotalPorMueble[$mid];
+
+                foreach ($jornalesPorMuebleSemana[$mid] as $sem => $jornales) {
+                    $proporcion = $jornales / $totalJornalesMueble;
+                    $valorProducidoPorSemana[$sem] = ($valorProducidoPorSemana[$sem] ?? 0) + ($valorNomina * $proporcion);
+                }
+            }
+
+            // Nómina solo de registros con mueble que tiene costo_mueble
+            foreach ($registros as $r) {
+                if (!$r->mueble_id || !in_array($r->mueble_id, $mueblesConCostoIds)) continue;
+                $sem = $r->semana;
+                $costoNominaEficiencia[$sem] = ($costoNominaEficiencia[$sem] ?? 0) + $r->costo_dia + $r->costo_he;
+            }
+        }
+
+        // Para barniz/costo por proyecto se sigue usando último barniz
         $ultimoBarniz = Tiempo::where('proceso', 'Barniz')
             ->whereBetween('fecha', [$inicioGeneral->format('Y-m-d'), $finGeneral->format('Y-m-d')])
             ->select('mueble_id', DB::raw('MAX(fecha) as ultima_fecha'))
             ->groupBy('mueble_id')
             ->get();
 
-        // Agrupar valor del mueble en la semana de su último barniz
-        foreach ($ultimoBarniz as $ub) {
-            $semBarniz = Carbon::parse($ub->ultima_fecha)->weekOfYear;
-            if ($semBarniz >= $semanaInicio && $semBarniz <= $semanaFin) {
-                $mueble = Mueble::find($ub->mueble_id);
-                if ($mueble && $mueble->costo_mueble) {
-                    $valorProducidoPorSemana[$semBarniz] = ($valorProducidoPorSemana[$semBarniz] ?? 0) + $mueble->costo_mueble;
-                }
-            }
-        }
-
-        // Muebles sin barniz aún (solo carpintería) -> no cuentan como producidos
-
         // 4. Totals
         $totalNomina = array_sum($costoNominaPorSemana);
+        $totalNominaEficiencia = array_sum($costoNominaEficiencia);
         $totalValor = array_sum($valorProducidoPorSemana);
-        $totalMargen = $totalValor - $totalNomina;
-        $totalEficiencia = $totalNomina > 0 ? ($totalValor / $totalNomina) * 100 : 0;
+        $totalMargen = $totalValor - $totalNominaEficiencia;
+        $totalEficiencia = $totalNominaEficiencia > 0 ? ($totalValor / $totalNominaEficiencia) * 100 : 0;
 
         // 5. Costo por proceso por semana: jornales desde nomina_diaria
         //    agrupado por equipo del personal y semana
@@ -464,8 +496,8 @@ class NominaController extends Controller
 
         return view('nomina.eficiencia', compact(
             'anio', 'semanaInicio', 'semanaFin', 'semanasConDatos',
-            'costoNominaPorSemana', 'valorProducidoPorSemana',
-            'totalNomina', 'totalValor', 'totalMargen', 'totalEficiencia',
+            'costoNominaPorSemana', 'costoNominaEficiencia', 'valorProducidoPorSemana',
+            'totalNomina', 'totalNominaEficiencia', 'totalValor', 'totalMargen', 'totalEficiencia',
             'costoPorProceso', 'totalPorProceso', 'totalCostoProceso', 'totalJornales',
             'costoPorProyecto', 'mueblesEnProduccion'
         ));

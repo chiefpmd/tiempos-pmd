@@ -33,8 +33,9 @@
 {{-- Summary Cards --}}
 <div class="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
     <div class="bg-white rounded-lg shadow p-4 border-l-4 border-red-500">
-        <p class="text-sm text-gray-500">Total Nómina</p>
-        <p class="text-2xl font-bold text-red-600">${{ number_format($totalNomina, 0) }}</p>
+        <p class="text-sm text-gray-500">Nómina (muebles con valor)</p>
+        <p class="text-2xl font-bold text-red-600">{{ $totalNominaEficiencia > 0 ? '$' . number_format($totalNominaEficiencia, 0) : 'Sin dato' }}</p>
+        <p class="text-xs text-gray-400 mt-1">Total nómina: ${{ number_format($totalNomina, 0) }}</p>
     </div>
     <div class="bg-white rounded-lg shadow p-4 border-l-4 border-green-500">
         <p class="text-sm text-gray-500">Total Valor Producido</p>
@@ -69,7 +70,7 @@
 </div>
 
 {{-- Weekly Table --}}
-<h2 class="text-base font-semibold text-gray-700 mt-6 mb-2">Resumen Semanal</h2>
+<h2 class="text-base font-semibold text-gray-700 mt-6 mb-2">Eficiencia Semanal <span class="text-xs font-normal text-gray-400">— Solo muebles con valor | 25% del valor = nómina estimada, repartido por jornales</span></h2>
 <div class="bg-white rounded-lg shadow overflow-x-auto mb-6">
     <table class="min-w-full text-xs">
         <thead class="bg-gray-50">
@@ -84,14 +85,14 @@
         <tbody class="divide-y divide-gray-100">
             @foreach($semanasVista as $sem)
                 @php
-                    $nomSem = $costoNominaPorSemana[$sem] ?? 0;
+                    $nomSem = $costoNominaEficiencia[$sem] ?? 0;
                     $valSem = $valorProducidoPorSemana[$sem] ?? 0;
                     $marSem = $valSem - $nomSem;
                     $efSem = $nomSem > 0 ? ($valSem / $nomSem) * 100 : 0;
                 @endphp
                 <tr class="hover:bg-gray-50 {{ $valSem > 0 ? ($marSem >= 0 ? 'bg-green-50' : 'bg-red-50') : '' }}">
                     <td class="px-3 py-1.5 text-gray-800 font-medium">Sem {{ $sem }}</td>
-                    <td class="px-3 py-1.5 text-right font-mono">${{ number_format($nomSem, 0) }}</td>
+                    <td class="px-3 py-1.5 text-right font-mono">{{ $nomSem > 0 ? '$' . number_format($nomSem, 0) : '-' }}</td>
                     <td class="px-3 py-1.5 text-right font-mono">
                         @if($valSem > 0) ${{ number_format($valSem, 0) }} @else <span class="text-gray-400">Sin dato</span> @endif
                     </td>
@@ -106,7 +107,7 @@
             {{-- Totals row --}}
             <tr class="bg-gray-50 font-semibold">
                 <td class="px-3 py-1.5 text-gray-700">Total</td>
-                <td class="px-3 py-1.5 text-right font-mono">${{ number_format($totalNomina, 0) }}</td>
+                <td class="px-3 py-1.5 text-right font-mono">{{ $totalNominaEficiencia > 0 ? '$' . number_format($totalNominaEficiencia, 0) : '-' }}</td>
                 <td class="px-3 py-1.5 text-right font-mono">
                     @if($totalValor > 0) ${{ number_format($totalValor, 0) }} @else <span class="text-gray-400">Sin dato</span> @endif
                 </td>
@@ -167,41 +168,6 @@
     </table>
 </div>
 
-{{-- Costo por Proceso por semana --}}
-<h2 class="text-base font-semibold text-gray-700 mt-6 mb-2">Costo por Proceso</h2>
-<div class="bg-white rounded-lg shadow overflow-x-auto mb-6">
-    <table class="min-w-full text-xs">
-        <thead class="bg-gray-50">
-            <tr>
-                <th class="px-3 py-2 text-left font-medium text-gray-500">Proceso</th>
-                @foreach($semanasVista as $sem)
-                    <th class="px-3 py-2 text-right font-medium text-gray-500 min-w-[80px]">Sem {{ $sem }}</th>
-                @endforeach
-                <th class="px-3 py-2 text-right font-medium text-gray-700 min-w-[90px]">Total</th>
-            </tr>
-        </thead>
-        <tbody class="divide-y divide-gray-100">
-            @foreach($costoPorProceso as $proceso => $semanas)
-                <tr class="hover:bg-gray-50">
-                    <td class="px-3 py-1.5 text-gray-800 font-medium">{{ $proceso }}</td>
-                    @foreach($semanasVista as $sem)
-                        @php $c = $semanas[$sem]['costo'] ?? 0; @endphp
-                        <td class="px-3 py-1.5 text-right font-mono">{{ $c > 0 ? '$' . number_format($c, 0) : '' }}</td>
-                    @endforeach
-                    <td class="px-3 py-1.5 text-right font-mono font-semibold">${{ number_format($totalPorProceso[$proceso]['costo'], 0) }}</td>
-                </tr>
-            @endforeach
-            <tr class="bg-gray-50 font-semibold">
-                <td class="px-3 py-1.5 text-gray-700">Total</td>
-                @foreach($semanasVista as $sem)
-                    @php $semCosto = 0; foreach($costoPorProceso as $eq => $ss) { $semCosto += $ss[$sem]['costo'] ?? 0; } @endphp
-                    <td class="px-3 py-1.5 text-right font-mono">${{ number_format($semCosto, 0) }}</td>
-                @endforeach
-                <td class="px-3 py-1.5 text-right font-mono">${{ number_format($totalCostoProceso, 0) }}</td>
-            </tr>
-        </tbody>
-    </table>
-</div>
 @endif
 
 {{-- Por Proyecto Table --}}
