@@ -22,6 +22,7 @@ Route::post('/logout', [AuthController::class, 'logout'])->name('logout');
 Route::middleware('auth')->group(function () {
     Route::get('/dashboard', [TiempoController::class, 'dashboard'])->name('dashboard');
     Route::get('/general', [TiempoController::class, 'vistaGeneral'])->name('general');
+    Route::get('/gantt-nomina', [NominaController::class, 'ganttNomina'])->name('gantt.nomina');
     Route::get('/gantt-anual', [TiempoController::class, 'ganttAnual'])->name('gantt.anual');
     Route::get('/proyecto/{proyecto}/captura', [TiempoController::class, 'captura'])->name('captura');
 

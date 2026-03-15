@@ -265,8 +265,8 @@
             <tr>
                 <th class="px-3 py-2 text-left font-medium text-gray-500">Mueble</th>
                 <th class="px-3 py-2 text-left font-medium text-gray-500">Proyecto</th>
-                <th class="px-3 py-2 text-left font-medium text-gray-500">Procesos</th>
-                <th class="px-3 py-2 text-right font-medium text-gray-500">Jornales</th>
+                <th class="px-3 py-2 text-left font-medium text-gray-500">Proyección</th>
+                <th class="px-3 py-2 text-right font-medium text-gray-500">Jornales Reales</th>
                 <th class="px-3 py-2 text-right font-medium text-gray-500">Costo Nómina</th>
                 <th class="px-3 py-2 text-right font-medium text-gray-500">Valor Mueble</th>
             </tr>

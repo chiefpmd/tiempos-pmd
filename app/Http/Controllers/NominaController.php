@@ -9,7 +9,9 @@ use App\Models\Personal;
 use App\Models\Mueble;
 use App\Models\Proyecto;
 use App\Models\Tiempo;
+use App\Models\DiaFestivo;
 use Carbon\Carbon;
+use Carbon\CarbonPeriod;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 
@@ -523,5 +525,101 @@ class NominaController extends Controller
             new \App\Exports\NominaReporteExport($semanaInicio, $semanaFin, $anio),
             "reporte_nomina_sem{$semanaInicio}-{$semanaFin}_{$anio}.xlsx"
         );
+    }
+
+    public function ganttNomina(Request $request)
+    {
+        $proyectos = Proyecto::where('status', 'activo')
+            ->with(['muebles' => fn($q) => $q->orderBy('numero')])
+            ->orderBy('fecha_inicio')
+            ->get();
+
+        if ($proyectos->isEmpty()) {
+            return view('nomina.gantt-nomina', [
+                'proyectos' => $proyectos,
+                'diasHabiles' => [],
+                'nominaMap' => [],
+                'festivos' => collect(),
+            ]);
+        }
+
+        // Window: 4 weeks back from today + forward to last project end
+        $defaultStart = Carbon::now()->startOfWeek()->subWeeks(4);
+        $ventanaInicio = $request->has('desde')
+            ? Carbon::parse($request->input('desde'))->startOfWeek()
+            : $defaultStart;
+
+        $rangoMin = $proyectos->min('fecha_inicio');
+        $ventanaFin = $proyectos->max(fn($p) => $p->fecha_fin);
+
+        if ($ventanaInicio->lt($rangoMin)) {
+            $ventanaInicio = $rangoMin->copy();
+        }
+
+        $festivos = DiaFestivo::whereBetween('fecha', [$ventanaInicio, $ventanaFin])
+            ->pluck('nombre', 'fecha')
+            ->mapWithKeys(fn($n, $f) => [Carbon::parse($f)->format('Y-m-d') => $n]);
+
+        $diasHabiles = [];
+        foreach (CarbonPeriod::create($ventanaInicio, $ventanaFin) as $dia) {
+            if ($dia->isWeekday()) {
+                $diasHabiles[] = $dia->copy();
+            }
+        }
+
+        $allMuebleIds = $proyectos->flatMap(fn($p) => $p->muebles->pluck('id'));
+
+        // Get all nomina entries for these muebles
+        $nomina = NominaDiaria::with('personal')
+            ->whereIn('mueble_id', $allMuebleIds)
+            ->whereNotNull('proyecto_id')
+            ->whereBetween('fecha', [$ventanaInicio, $ventanaFin])
+            ->get();
+
+        // Map: mueble_id => fecha => [ equipo => [ personas => [nombre, ...], count => N ] ]
+        $nominaMap = [];
+        foreach ($nomina as $nr) {
+            $mid = $nr->mueble_id;
+            $fecha = $nr->fecha->format('Y-m-d');
+            $equipo = $nr->personal?->equipo ?? 'Otro';
+            $nombre = $nr->personal?->nombre ?? '?';
+
+            if (!isset($nominaMap[$mid][$fecha][$equipo])) {
+                $nominaMap[$mid][$fecha][$equipo] = ['personas' => [], 'count' => 0];
+            }
+            $nominaMap[$mid][$fecha][$equipo]['personas'][] = $nombre;
+            $nominaMap[$mid][$fecha][$equipo]['count']++;
+        }
+
+        // Navigation
+        $canGoBack = $ventanaInicio->gt($rangoMin);
+        $prevDesde = $ventanaInicio->copy()->subWeeks(2)->format('Y-m-d');
+        $nextDesde = $ventanaInicio->copy()->addWeeks(2)->format('Y-m-d');
+        $todayDesde = $defaultStart->format('Y-m-d');
+        $allDesde = $rangoMin->format('Y-m-d');
+
+        // Colors per project
+        $colores = ['#3b82f6','#f59e0b','#10b981','#ef4444','#8b5cf6','#ec4899','#14b8a6','#f97316','#6366f1','#84cc16'];
+        $proyectoColores = [];
+        foreach ($proyectos as $i => $proy) {
+            $proyectoColores[$proy->id] = $colores[$i % count($colores)];
+        }
+
+        // Equipo colors
+        $equipoColores = [
+            'Carpintería' => '#f59e0b',
+            'Barniz' => '#10b981',
+            'Instalación' => '#3b82f6',
+            'Armado' => '#8b5cf6',
+            'Vidrio' => '#06b6d4',
+            'Herrero' => '#6b7280',
+            'Eléctrico' => '#ec4899',
+        ];
+
+        return view('nomina.gantt-nomina', compact(
+            'proyectos', 'diasHabiles', 'nominaMap', 'festivos',
+            'canGoBack', 'prevDesde', 'nextDesde', 'todayDesde', 'allDesde',
+            'proyectoColores', 'equipoColores'
+        ));
     }
 }
