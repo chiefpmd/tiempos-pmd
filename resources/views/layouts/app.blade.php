@@ -29,6 +29,7 @@
                     <a href="{{ route('nomina.semanal') }}" class="px-3 py-2 rounded-md text-sm font-medium {{ request()->routeIs('nomina.semanal') ? 'bg-gray-900 text-white' : 'text-gray-100 hover:bg-gray-700 hover:text-white' }}">Nómina</a>
 
                     <a href="{{ route('nomina.reporte') }}" class="px-3 py-2 rounded-md text-sm font-medium {{ request()->routeIs('nomina.reporte') ? 'bg-gray-900 text-white' : 'text-gray-100 hover:bg-gray-700 hover:text-white' }}">Costo x Proyecto</a>
+                    <a href="{{ route('nomina.eficiencia') }}" class="px-3 py-2 rounded-md text-sm font-medium {{ request()->routeIs('nomina.eficiencia') ? 'bg-gray-900 text-white' : 'text-gray-100 hover:bg-gray-700 hover:text-white' }}">Eficiencia</a>
                     @if(auth()->user()->isAdmin())
                         <a href="{{ route('festivos.index') }}" class="px-3 py-2 rounded-md text-sm font-medium {{ request()->routeIs('festivos.*') ? 'bg-gray-900 text-white' : 'text-gray-100 hover:bg-gray-700 hover:text-white' }}">Festivos</a>
                         <a href="{{ route('nomina.categorias') }}" class="px-3 py-2 rounded-md text-sm font-medium {{ request()->routeIs('nomina.categorias') ? 'bg-gray-900 text-white' : 'text-gray-100 hover:bg-gray-700 hover:text-white' }}">Cat. Nómina</a>

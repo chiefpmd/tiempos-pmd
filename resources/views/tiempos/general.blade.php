@@ -377,6 +377,37 @@
                                     @endforeach
                                 </td>
                             </tr>
+                            {{-- Fila REAL: jornales de nómina --}}
+                            @php
+                                $muebleReal = $realMap[$mueble->id] ?? [];
+                                $totalRealDias = count($muebleReal);
+                                $totalRealJornales = 0;
+                                foreach ($muebleReal as $f => $equipos) {
+                                    $totalRealJornales += array_sum($equipos);
+                                }
+                            @endphp
+                            @if($totalRealDias > 0)
+                            <tr class="border-b border-gray-200" style="height: 20px;">
+                                <td class="sticky left-0 bg-gray-50 z-10"></td>
+                                <td class="sticky-desc bg-gray-50" style="min-width:160px">
+                                    <span class="text-[9px] text-orange-500 font-medium">REAL</span>
+                                </td>
+                                @foreach($diasHabiles as $dia)
+                                    @php
+                                        $diaStr = $dia->format('Y-m-d');
+                                        $realDia = $muebleReal[$diaStr] ?? [];
+                                        $jornalesDia = array_sum($realDia);
+                                    @endphp
+                                    <td class="gen-cell text-center {{ $dia->isMonday() ? 'border-l-2 border-blue-200' : '' }}"
+                                        @if($jornalesDia > 0) title="{{ implode(', ', array_map(fn($e, $c) => $e . ':' . $c, array_keys($realDia), $realDia)) }}" @endif>
+                                        @if($jornalesDia > 0)
+                                            <span class="inline-block w-4 h-3 rounded text-[8px] font-bold text-white bg-orange-400 leading-3">{{ $jornalesDia }}</span>
+                                        @endif
+                                    </td>
+                                @endforeach
+                                <td class="px-1 text-center text-[9px] text-orange-500 font-medium bg-gray-50">{{ $totalRealJornales }}j</td>
+                            </tr>
+                            @endif
                         @endforeach
                     </tbody>
                 </table>

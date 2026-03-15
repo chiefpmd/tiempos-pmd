@@ -258,6 +258,217 @@ class NominaController extends Controller
         ));
     }
 
+    public function eficiencia(Request $request)
+    {
+        $anio = $request->integer('anio', now()->year);
+        $semanaInicio = $request->integer('semana_inicio', 1);
+        $semanaFin = $request->integer('semana_fin', now()->weekOfYear);
+
+        // 1. Get all nomina records for the period
+        $registros = NominaDiaria::with(['personal', 'proyecto', 'mueble'])
+            ->where('semana', '>=', $semanaInicio)
+            ->where('semana', '<=', $semanaFin)
+            ->whereHas('personal', fn($q) => $q->whereNotNull('nomina_bruta_semanal'))
+            ->get();
+
+        $semanasConDatos = $registros->pluck('semana')->unique()->sort()->values();
+
+        // 2. Costo nómina per week
+        $costoNominaPorSemana = [];
+        foreach ($registros as $r) {
+            $sem = $r->semana;
+            $costoNominaPorSemana[$sem] = ($costoNominaPorSemana[$sem] ?? 0) + $r->costo_dia + $r->costo_he;
+        }
+
+        // 3. Valor producido per week: mueble cuenta como "producido" en la
+        //    última semana que tiene registro de Barniz (cuando sale del taller)
+        $valorProducidoPorSemana = [];
+        $inicioGeneral = Carbon::now()->setISODate($anio, $semanaInicio, 1);
+        $finGeneral = Carbon::now()->setISODate($anio, $semanaFin, 7);
+
+        // Buscar última fecha de Barniz por mueble en el periodo
+        $ultimoBarniz = Tiempo::where('proceso', 'Barniz')
+            ->whereBetween('fecha', [$inicioGeneral->format('Y-m-d'), $finGeneral->format('Y-m-d')])
+            ->select('mueble_id', DB::raw('MAX(fecha) as ultima_fecha'))
+            ->groupBy('mueble_id')
+            ->get();
+
+        // Agrupar valor del mueble en la semana de su último barniz
+        foreach ($ultimoBarniz as $ub) {
+            $semBarniz = Carbon::parse($ub->ultima_fecha)->weekOfYear;
+            if ($semBarniz >= $semanaInicio && $semBarniz <= $semanaFin) {
+                $mueble = Mueble::find($ub->mueble_id);
+                if ($mueble && $mueble->costo_mueble) {
+                    $valorProducidoPorSemana[$semBarniz] = ($valorProducidoPorSemana[$semBarniz] ?? 0) + $mueble->costo_mueble;
+                }
+            }
+        }
+
+        // Muebles sin barniz aún (solo carpintería) -> no cuentan como producidos
+
+        // 4. Totals
+        $totalNomina = array_sum($costoNominaPorSemana);
+        $totalValor = array_sum($valorProducidoPorSemana);
+        $totalMargen = $totalValor - $totalNomina;
+        $totalEficiencia = $totalNomina > 0 ? ($totalValor / $totalNomina) * 100 : 0;
+
+        // 5. Costo por proceso por semana: jornales desde nomina_diaria
+        //    agrupado por equipo del personal y semana
+        $costoPorProceso = [];  // [equipo => [sem => ['jornales' => X, 'costo' => Y]]]
+        foreach ($registros as $r) {
+            if (!$r->proyecto_id) continue;
+            $equipo = $r->personal?->equipo ?? 'Sin equipo';
+            $sem = $r->semana;
+            if (!isset($costoPorProceso[$equipo][$sem])) {
+                $costoPorProceso[$equipo][$sem] = ['jornales' => 0, 'costo' => 0];
+            }
+            $costoPorProceso[$equipo][$sem]['jornales']++;
+            $costoPorProceso[$equipo][$sem]['costo'] += $r->costo_dia + $r->costo_he;
+        }
+        ksort($costoPorProceso);
+
+        // Totales por proceso (todas las semanas)
+        $totalPorProceso = [];
+        $totalCostoProceso = 0;
+        $totalJornales = 0;
+        foreach ($costoPorProceso as $equipo => $semanas) {
+            $totalPorProceso[$equipo] = [
+                'jornales' => array_sum(array_column($semanas, 'jornales')),
+                'costo' => array_sum(array_column($semanas, 'costo')),
+            ];
+            $totalCostoProceso += $totalPorProceso[$equipo]['costo'];
+            $totalJornales += $totalPorProceso[$equipo]['jornales'];
+        }
+
+        // 6. Costo por proyecto: from nomina_diaria grouped by proyecto
+        $costoPorProyecto = [];
+        foreach ($registros as $r) {
+            if (!$r->proyecto_id) continue;
+            $nombre = $r->proyecto?->nombre ?? 'Sin Proyecto';
+            $proyId = $r->proyecto_id;
+
+            if (!isset($costoPorProyecto[$nombre])) {
+                $costoPorProyecto[$nombre] = ['nomina' => 0, 'valor_muebles' => 0, 'mueble_ids' => []];
+            }
+            $costoPorProyecto[$nombre]['nomina'] += $r->costo_dia + $r->costo_he;
+
+            if ($r->mueble_id && !in_array($r->mueble_id, $costoPorProyecto[$nombre]['mueble_ids'])) {
+                $costoPorProyecto[$nombre]['mueble_ids'][] = $r->mueble_id;
+            }
+        }
+
+        // Get valor muebles per project (solo muebles que ya pasaron por barniz)
+        $mueblesBarnizados = $ultimoBarniz->pluck('mueble_id')->toArray();
+        foreach ($costoPorProyecto as $nombre => &$data) {
+            $idsConBarniz = array_intersect($data['mueble_ids'], $mueblesBarnizados);
+            if (!empty($idsConBarniz)) {
+                $data['valor_muebles'] = Mueble::whereIn('id', $idsConBarniz)
+                    ->whereNotNull('costo_mueble')
+                    ->sum('costo_mueble');
+            }
+            unset($data['mueble_ids']);
+        }
+        unset($data);
+
+        arsort($costoPorProyecto);
+
+        // 7. Muebles en producción: tienen tiempos registrados pero NO han
+        //    terminado barniz (no están en $mueblesBarnizados)
+        $mueblesBarnizadosIds = $ultimoBarniz->pluck('mueble_id')->toArray();
+
+        // Todos los muebles que han tenido trabajo alguna vez (proyectos activos)
+        $mueblesConTrabajo = Tiempo::join('muebles', 'tiempos.mueble_id', '=', 'muebles.id')
+            ->join('proyectos', 'muebles.proyecto_id', '=', 'proyectos.id')
+            ->where('proyectos.status', 'activo')
+            ->select('tiempos.mueble_id')
+            ->distinct()
+            ->pluck('mueble_id');
+
+        // Filtrar: solo los que NO tienen barniz terminado
+        $enProduccionIds = $mueblesConTrabajo->diff($mueblesBarnizadosIds);
+
+        $mueblesEnProduccion = [];
+        if ($enProduccionIds->isNotEmpty()) {
+            $muebles = Mueble::with('proyecto')->whereIn('id', $enProduccionIds)->get()->keyBy('id');
+
+            // Jornales y costo desde nomina_diaria (solo Carpintería y Barniz)
+            $nominaPorMueble = NominaDiaria::with('personal')
+                ->whereIn('mueble_id', $enProduccionIds)
+                ->whereHas('personal', fn($q) => $q->whereNotNull('nomina_bruta_semanal')
+                    ->whereIn('equipo', ['Carpintería', 'Barniz']))
+                ->get()
+                ->groupBy('mueble_id');
+
+            // Procesos proyectados desde tiempos (Carpintería y Barniz - vista general)
+            $horasProceso = Tiempo::whereIn('mueble_id', $enProduccionIds)
+                ->whereIn('proceso', ['Carpintería', 'Barniz'])
+                ->select('mueble_id', 'proceso', DB::raw('SUM(horas) as total_horas'))
+                ->groupBy('mueble_id', 'proceso')
+                ->get()
+                ->groupBy('mueble_id');
+
+            // "Otros" desde nomina_diaria: departamentos que no son Carpintería, Barniz ni Instalación
+            $otrosJornales = NominaDiaria::with('personal')
+                ->whereIn('mueble_id', $enProduccionIds)
+                ->whereNotNull('proyecto_id')
+                ->whereHas('personal', fn($q) => $q->whereNotNull('nomina_bruta_semanal')
+                    ->whereNotIn('equipo', ['Carpintería', 'Barniz', 'Instalación']))
+                ->get()
+                ->groupBy('mueble_id')
+                ->map(fn($regs) => [
+                    'jornales' => $regs->count(),
+                    'costo' => $regs->sum(fn($r) => $r->costo_dia + $r->costo_he),
+                ]);
+
+            foreach ($enProduccionIds as $mid) {
+                $mueble = $muebles->get($mid);
+                if (!$mueble) continue;
+
+                $regs = $nominaPorMueble->get($mid, collect());
+                $jornales = $regs->filter(fn($r) => $r->proyecto_id)->count();
+                $costo = $regs->sum(fn($r) => $r->costo_dia + $r->costo_he);
+
+                // Procesos proyectados (Carpintería y Barniz de tiempos)
+                $procesos = $horasProceso->get($mid, collect());
+                $partes = $procesos->map(fn($p) => $p->proceso . ' ' . intval($p->total_horas) . 'j')
+                    ->toArray();
+
+                // Agregar "Otros" de nomina si hay
+                $otros = $otrosJornales->get($mid);
+                $otrosJornalesCount = $otros['jornales'] ?? 0;
+                $otrosCosto = $otros['costo'] ?? 0;
+                if ($otrosJornalesCount > 0) {
+                    $partes[] = 'Otros ' . $otrosJornalesCount . 'j';
+                }
+                $procesoStr = implode(' | ', $partes);
+
+                // Sumar costo de "Otros" al costo total del mueble
+                $costoTotal = (float) $costo + $otrosCosto;
+                $jornalesTotal = $jornales + $otrosJornalesCount;
+
+                $mueblesEnProduccion[] = [
+                    'mueble' => $mueble->numero . ' - ' . $mueble->descripcion,
+                    'proyecto' => $mueble->proyecto?->nombre ?? 'Sin Proyecto',
+                    'jornales' => $jornalesTotal,
+                    'procesos' => $procesoStr,
+                    'costo_nomina' => $costoTotal,
+                    'valor_mueble' => $mueble->costo_mueble ?? 0,
+                ];
+            }
+
+            // Ordenar por jornales desc
+            usort($mueblesEnProduccion, fn($a, $b) => $b['jornales'] <=> $a['jornales']);
+        }
+
+        return view('nomina.eficiencia', compact(
+            'anio', 'semanaInicio', 'semanaFin', 'semanasConDatos',
+            'costoNominaPorSemana', 'valorProducidoPorSemana',
+            'totalNomina', 'totalValor', 'totalMargen', 'totalEficiencia',
+            'costoPorProceso', 'totalPorProceso', 'totalCostoProceso', 'totalJornales',
+            'costoPorProyecto', 'mueblesEnProduccion'
+        ));
+    }
+
     public function costoMuebles(Request $request, Proyecto $proyecto)
     {
         $anio = $request->integer('anio', now()->year);

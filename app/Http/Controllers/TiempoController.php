@@ -647,9 +647,27 @@ class TiempoController extends Controller
         $todayDesde = $defaultStart->format('Y-m-d');
         $allDesde = $rangoMin->format('Y-m-d');
 
+        // Real: jornales de nómina por mueble/día/equipo (excluye Instalación)
+        $nominaReal = NominaDiaria::with('personal')
+            ->whereIn('mueble_id', $allMuebleIds)
+            ->whereNotNull('proyecto_id')
+            ->whereBetween('fecha', [$ventanaInicio, $ventanaFin])
+            ->whereHas('personal', fn($q) => $q->whereNotIn('equipo', ['Instalación']))
+            ->get();
+
+        // Map: mueble_id => fecha => [equipo => count]
+        $realMap = [];
+        foreach ($nominaReal as $nr) {
+            $mid = $nr->mueble_id;
+            $fecha = $nr->fecha->format('Y-m-d');
+            $equipo = $nr->personal?->equipo ?? 'Otro';
+            $realMap[$mid][$fecha][$equipo] = ($realMap[$mid][$fecha][$equipo] ?? 0) + 1;
+        }
+
         return view('tiempos.general', compact(
             'proyectos', 'diasHabiles', 'tiemposMap', 'personal', 'procesos', 'festivos',
-            'ventanaInicio', 'ventanaFin', 'canGoBack', 'prevDesde', 'nextDesde', 'todayDesde', 'allDesde'
+            'ventanaInicio', 'ventanaFin', 'canGoBack', 'prevDesde', 'nextDesde', 'todayDesde', 'allDesde',
+            'realMap'
         ));
     }
 }
