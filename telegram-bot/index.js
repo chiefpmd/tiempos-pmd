@@ -5,9 +5,9 @@ const db = require('./db');
 const { askClaude } = require('./ai');
 
 const bot = new TelegramBot(process.env.TELEGRAM_BOT_TOKEN, { polling: true });
-const CHAT_ID = process.env.TELEGRAM_CHAT_ID;
+const ALLOWED_IDS = (process.env.TELEGRAM_CHAT_IDS || '').split(',').map(id => id.trim());
 
-function isAuth(msg) { return String(msg.chat.id) === String(CHAT_ID); }
+function isAuth(msg) { return ALLOWED_IDS.includes(String(msg.chat.id)); }
 
 // Get current date/time in CDMX timezone
 function cdmxNow() { return new Date(new Date().toLocaleString('en-US', { timeZone: 'America/Mexico_City' })); }
