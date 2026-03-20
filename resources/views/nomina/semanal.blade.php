@@ -32,10 +32,12 @@
         </a>
 
         @if(auth()->user()->isAdmin())
-        <button onclick="prellenar()" id="btn-prellenar"
-                class="bg-indigo-600 text-white px-3 py-1 rounded text-sm hover:bg-indigo-700">
-            Pre-llenar desde Tiempos
+        @if($festivosEnRango->isNotEmpty())
+        <button onclick="aplicarFestivos()" id="btn-festivos"
+                class="bg-amber-500 text-white px-3 py-1 rounded text-sm hover:bg-amber-600">
+            Aplicar Festivos ({{ $festivosEnRango->count() }})
         </button>
+        @endif
         @endif
     </div>
 </div>
@@ -100,20 +102,30 @@
                                 <div class="text-amber-500 text-[10px]">Sin sueldo</div>
                             @endif
                             @if(auth()->user()->isAdmin())
-                            <button onclick="aplicarMuebleSemana({{ $emp->id }})"
-                                    class="mt-1 text-[10px] bg-blue-50 text-blue-600 border border-blue-200 rounded px-1.5 py-0.5 hover:bg-blue-100"
-                                    title="Copia el mueble del primer día a todos los días de esta persona">
-                                Mueble &rarr; semana
-                            </button>
+                            <div class="flex flex-wrap gap-1 mt-1">
+                                <button onclick="aplicarProyectoSemana({{ $emp->id }})"
+                                        class="text-[10px] bg-green-50 text-green-600 border border-green-200 rounded px-1.5 py-0.5 hover:bg-green-100"
+                                        title="Copia el proyecto del primer día a todos los días sin asignar">
+                                    Proy &rarr; sem
+                                </button>
+                                <button onclick="aplicarMuebleSemana({{ $emp->id }})"
+                                        class="text-[10px] bg-blue-50 text-blue-600 border border-blue-200 rounded px-1.5 py-0.5 hover:bg-blue-100"
+                                        title="Copia el mueble del primer día a todos los días de esta persona">
+                                    Mueble &rarr; sem
+                                </button>
+                            </div>
                             @endif
                         </td>
                         @endif
 
-                        <td class="px-3 py-1 text-gray-500">
+                        <td class="px-3 py-1 {{ isset($festivosEnRango[$dia->format('Y-m-d')]) ? 'bg-amber-50 text-amber-700 font-semibold' : 'text-gray-500' }}">
                             @if($isFirstDayOfWeek && $totalSemanas > 1)
                                 <span class="text-blue-600 font-semibold text-[9px]">S{{ $currentWeek }}</span>
                             @endif
                             {{ $diasNombre[$dayOfWeek] }} {{ $dia->format('d/m') }}
+                            @if(isset($festivosEnRango[$dia->format('Y-m-d')]))
+                                <div class="text-[9px] text-amber-500">{{ $festivosEnRango[$dia->format('Y-m-d')] }}</div>
+                            @endif
                         </td>
 
                         <td class="px-3 py-1">
@@ -330,45 +342,85 @@ async function aplicarMuebleSemana(personalId) {
     }
 }
 
-function prellenar() {
-    const btn = document.getElementById('btn-prellenar');
-    btn.disabled = true;
-    btn.textContent = 'Pre-llenando...';
+async function aplicarProyectoSemana(personalId) {
+    const rows = document.querySelectorAll(`tr[data-personal-id="${personalId}"]`);
+    if (!rows.length) return;
 
-    // Pre-fill each week in the range
-    const semanaInicio = {{ $semana }};
-    const semanaFin = {{ $semanaFin }};
-    const anio = {{ $anio }};
-
-    async function prellenarSemanas() {
-        let totalCount = 0;
-        for (let s = semanaInicio; s <= semanaFin; s++) {
-            const res = await fetch('{{ route("nomina.prellenar") }}', {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                    'X-CSRF-TOKEN': csrfToken,
-                    'Accept': 'application/json',
-                },
-                body: JSON.stringify({ semana: s, anio: anio }),
-            });
-            const data = await res.json();
-            totalCount += data.count || 0;
+    // Find first row with a project assigned
+    let proyectoVal = null;
+    for (const row of rows) {
+        const as = row.querySelector('.asignacion-select');
+        if (as && as.value && as.value.startsWith('proyecto_')) {
+            proyectoVal = as.value;
+            break;
         }
-        return totalCount;
     }
 
-    prellenarSemanas()
-    .then(count => {
-        alert('Se pre-llenaron ' + count + ' registros');
+    if (!proyectoVal) {
+        alert('Primero selecciona un proyecto en algún día.');
+        return;
+    }
+
+    let count = 0;
+    for (const row of rows) {
+        const asignacionSelect = row.querySelector('.asignacion-select');
+
+        // Only apply to rows without assignment
+        if (asignacionSelect.value) continue;
+
+        asignacionSelect.value = proyectoVal;
+
+        // Update mueble dropdown for the new project
+        const parts = proyectoVal.split('_');
+        actualizarMuebles(row, parts.slice(1).join('_'));
+
+        guardarCelda(asignacionSelect);
+        count++;
+        await new Promise(r => setTimeout(r, 100));
+    }
+
+    if (count === 0) {
+        alert('Todos los días ya tienen asignación.');
+    }
+}
+
+const festivosEnRango = @json($festivosEnRango ?? []);
+
+function aplicarFestivos() {
+    const fechas = Object.keys(festivosEnRango);
+    if (!fechas.length) {
+        alert('No hay festivos en este rango.');
+        return;
+    }
+
+    const nombres = Object.values(festivosEnRango).join(', ');
+    if (!confirm(`¿Aplicar "${nombres}" como día festivo a todos los empleados sin asignación?`)) return;
+
+    const btn = document.getElementById('btn-festivos');
+    btn.disabled = true;
+    btn.textContent = 'Aplicando...';
+
+    fetch('{{ route("nomina.aplicarFestivos") }}', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+            'X-CSRF-TOKEN': csrfToken,
+            'Accept': 'application/json',
+        },
+        body: JSON.stringify({ fechas: fechas }),
+    })
+    .then(r => r.json())
+    .then(data => {
+        alert(data.message);
         window.location.reload();
     })
     .catch(err => {
-        alert('Error al pre-llenar');
+        alert('Error al aplicar festivos');
         btn.disabled = false;
-        btn.textContent = 'Pre-llenar desde Tiempos';
+        btn.textContent = 'Aplicar Festivos';
     });
 }
+
 </script>
 @endpush
 @endsection

@@ -67,9 +67,9 @@ Route::middleware('auth')->group(function () {
         Route::post('/festivos', [DiaFestivoController::class, 'store'])->name('festivos.store');
         Route::delete('/festivos/{festivo}', [DiaFestivoController::class, 'destroy'])->name('festivos.destroy');
 
-        // Nómina - guardar y prellenar (admin only)
+        // Nómina - guardar (admin only)
         Route::post('/nomina/guardar', [NominaController::class, 'guardar'])->name('nomina.guardar');
-        Route::post('/nomina/prellenar', [NominaController::class, 'prellenar'])->name('nomina.prellenar');
+        Route::post('/nomina/aplicar-festivos', [NominaController::class, 'aplicarFestivos'])->name('nomina.aplicarFestivos');
         Route::post('/nomina/costo-mueble/{mueble}', [NominaController::class, 'guardarCostoMueble'])->name('nomina.guardarCostoMueble');
 
         // Equipos del día (disabled - using lider_id from personal instead)

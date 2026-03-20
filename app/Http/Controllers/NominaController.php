@@ -30,6 +30,11 @@ class NominaController extends Controller
         $inicioSemana = Carbon::now()->setISODate($anio, $semana, 1); // Monday
         $finSemana = Carbon::now()->setISODate($anio, $semanaFin, 5); // Friday of last week
 
+        // Get festivos in range
+        $festivosEnRango = DiaFestivo::whereBetween('fecha', [$inicioSemana->format('Y-m-d'), $finSemana->format('Y-m-d')])
+            ->pluck('nombre', 'fecha')
+            ->mapWithKeys(fn($n, $f) => [Carbon::parse($f)->format('Y-m-d') => $n]);
+
         $dias = [];
         for ($d = $inicioSemana->copy(); $d->lte($finSemana); $d->addDay()) {
             if ($d->isWeekday()) {
@@ -63,7 +68,8 @@ class NominaController extends Controller
         return view('nomina.semanal', compact(
             'anio', 'semana', 'semanaFin', 'dias', 'empleados', 'registros',
             'proyectos', 'categorias', 'inicioSemana', 'finSemana',
-            'todosEmpleados', 'personalFiltro', 'mueblesPorProyecto'
+            'todosEmpleados', 'personalFiltro', 'mueblesPorProyecto',
+            'festivosEnRango'
         ));
     }
 
@@ -115,80 +121,42 @@ class NominaController extends Controller
         ]);
     }
 
-    public function prellenar(Request $request)
+    public function aplicarFestivos(Request $request)
     {
-        $anio = $request->integer('anio', now()->year);
-        $semana = $request->integer('semana', now()->weekOfYear);
+        $request->validate([
+            'fechas' => 'required|array',
+            'fechas.*' => 'date',
+        ]);
 
-        $inicioSemana = Carbon::now()->setISODate($anio, $semana, 1);
-        $finSemana = $inicioSemana->copy()->addDays(4);
-        $fechaInicio = $inicioSemana->format('Y-m-d');
-        $fechaFin = $finSemana->format('Y-m-d');
+        $categoriaFestivo = CategoriaNomina::where('nombre', 'Dia festivo')->first();
+        if (!$categoriaFestivo) {
+            return response()->json(['ok' => false, 'message' => 'Categoría "Dia festivo" no existe.'], 400);
+        }
 
-        $trabajadores = Personal::where('activo', true)->whereNotNull('lider_id')->get();
-        $trabajadorIds = $trabajadores->pluck('id');
-
-        // Existing nomina entries with assignments (skip these)
-        $nominaExistentes = NominaDiaria::whereIn('personal_id', $trabajadorIds)
-            ->whereBetween('fecha', [$fechaInicio, $fechaFin])
-            ->where(function ($q) {
-                $q->whereNotNull('proyecto_id')
-                  ->orWhereNotNull('categoria_id');
-            })
-            ->get()
-            ->groupBy(fn($r) => $r->personal_id . '_' . $r->fecha->format('Y-m-d'));
-
-        // Leader time entries for the week (top project per leader per day)
-        $liderIds = $trabajadores->pluck('lider_id')->unique();
-
-        // Also pre-fill leaders themselves from their own time entries
-        $lideres = Personal::where('activo', true)->where('es_lider', true)->get();
-        $liderIds = $liderIds->merge($lideres->pluck('id'))->unique();
-
-        $tiemposLideres = Tiempo::whereIn('tiempos.personal_id', $liderIds)
-            ->whereBetween('tiempos.fecha', [$fechaInicio, $fechaFin])
-            ->join('muebles', 'tiempos.mueble_id', '=', 'muebles.id')
-            ->select('tiempos.personal_id', 'tiempos.fecha', 'muebles.proyecto_id', DB::raw('SUM(tiempos.horas) as total_horas'))
-            ->groupBy('tiempos.personal_id', 'tiempos.fecha', 'muebles.proyecto_id')
-            ->orderByDesc('total_horas')
-            ->get()
-            ->groupBy(fn($t) => $t->personal_id . '_' . $t->fecha->format('Y-m-d'));
-
+        $empleados = Personal::where('activo', true)->get();
         $count = 0;
-        $allPersonnel = $trabajadores->merge($lideres)->unique('id');
 
-        // Check existing nomina for leaders too
-        $nominaLideres = NominaDiaria::whereIn('personal_id', $lideres->pluck('id'))
-            ->whereBetween('fecha', [$fechaInicio, $fechaFin])
-            ->where(function ($q) {
-                $q->whereNotNull('proyecto_id')
-                  ->orWhereNotNull('categoria_id');
-            })
-            ->get()
-            ->groupBy(fn($r) => $r->personal_id . '_' . $r->fecha->format('Y-m-d'));
+        foreach ($request->fechas as $fechaStr) {
+            $fecha = Carbon::parse($fechaStr);
 
-        $allExistentes = $nominaExistentes->merge($nominaLideres);
+            foreach ($empleados as $emp) {
+                // Only create if no existing assignment
+                $existe = NominaDiaria::where('personal_id', $emp->id)
+                    ->where('fecha', $fecha->format('Y-m-d'))
+                    ->where(function ($q) {
+                        $q->whereNotNull('proyecto_id')
+                          ->orWhereNotNull('categoria_id');
+                    })
+                    ->exists();
 
-        foreach ($allPersonnel as $persona) {
-            // For workers, use their lider_id; for leaders, use their own id
-            $liderIdParaBuscar = $persona->es_lider ? $persona->id : $persona->lider_id;
-
-            for ($d = $inicioSemana->copy(); $d->lte($finSemana); $d->addDay()) {
-                $fechaStr = $d->format('Y-m-d');
-                $key = $persona->id . '_' . $fechaStr;
-
-                if ($allExistentes->has($key)) continue;
-
-                $liderKey = $liderIdParaBuscar . '_' . $fechaStr;
-                $topProyecto = $tiemposLideres->get($liderKey)?->first();
-
-                if ($topProyecto) {
+                if (!$existe) {
                     NominaDiaria::updateOrCreate(
-                        ['personal_id' => $persona->id, 'fecha' => $fechaStr],
+                        ['personal_id' => $emp->id, 'fecha' => $fecha->format('Y-m-d')],
                         [
-                            'semana' => $d->weekOfYear,
-                            'proyecto_id' => $topProyecto->proyecto_id,
-                            'categoria_id' => null,
+                            'semana' => $fecha->weekOfYear,
+                            'proyecto_id' => null,
+                            'mueble_id' => null,
+                            'categoria_id' => $categoriaFestivo->id,
                             'horas_extra' => 0,
                             'proyecto_he_id' => null,
                         ]
@@ -201,7 +169,7 @@ class NominaController extends Controller
         return response()->json([
             'ok' => true,
             'count' => $count,
-            'message' => "Se pre-llenaron {$count} registros desde tiempos.",
+            'message' => "Se asignaron {$count} registros como día festivo.",
         ]);
     }
 
@@ -487,6 +455,7 @@ class NominaController extends Controller
                     'procesos' => $procesoStr,
                     'costo_nomina' => $costoTotal,
                     'valor_mueble' => $mueble->costo_mueble ?? 0,
+                    'jornales_presupuesto' => $mueble->jornales_presupuesto ?? 0,
                 ];
             }
 
@@ -540,11 +509,19 @@ class NominaController extends Controller
     {
         $request->validate([
             'costo_mueble' => 'nullable|numeric|min:0',
+            'jornales_presupuesto' => 'nullable|numeric|min:0',
         ]);
 
-        $mueble->update(['costo_mueble' => $request->costo_mueble]);
+        $fields = [];
+        if ($request->has('costo_mueble')) {
+            $fields['costo_mueble'] = $request->costo_mueble;
+        }
+        if ($request->has('jornales_presupuesto')) {
+            $fields['jornales_presupuesto'] = $request->jornales_presupuesto;
+        }
+        $mueble->update($fields);
 
-        return response()->json(['ok' => true, 'costo_mueble' => $mueble->costo_mueble]);
+        return response()->json(['ok' => true, 'costo_mueble' => $mueble->costo_mueble, 'jornales_presupuesto' => $mueble->jornales_presupuesto]);
     }
 
     public function exportarReporte(Request $request)

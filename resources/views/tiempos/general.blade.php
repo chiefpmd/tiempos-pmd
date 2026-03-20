@@ -3,7 +3,19 @@
 
 @push('styles')
 <style>
-    .gen-cell { min-width: 36px; font-size: 11px; padding: 1px; border-right: 1px solid rgba(209,213,219,0.5); }
+    .gen-cell { min-width: 36px; font-size: 11px; padding: 1px; border-right: 1px solid rgba(156,163,175,0.6) !important; }
+    .week-start { position: relative; }
+    .week-start::before {
+        content: '';
+        position: absolute;
+        left: -1px;
+        top: 0;
+        bottom: 0;
+        width: 2px;
+        background: rgba(59,130,246,0.45);
+        z-index: 8;
+        pointer-events: none;
+    }
     .mueble-sep { border-top: 2px solid #d1d5db; }
     .proyecto-sep { border-top: 3px solid #6b7280; }
 
@@ -269,7 +281,7 @@
                             <th class="px-2 py-1 sticky left-0 bg-gray-50 z-20" style="min-width:80px"></th>
                             <th class="px-2 py-1 sticky-desc-header bg-gray-50" style="min-width:160px"></th>
                             @foreach($semanas as $numSemana => $diasSemana)
-                                <th class="text-center font-bold text-blue-600 bg-blue-50 border-l-2 border-blue-200 text-xs" colspan="{{ count($diasSemana) }}">
+                                <th class="text-center font-bold text-blue-600 bg-blue-50 week-start text-xs" colspan="{{ count($diasSemana) }}">
                                     Sem {{ $numSemana }}
                                 </th>
                             @endforeach
@@ -286,7 +298,7 @@
                                     if ($diaStr === $fechaPedido) $matHeaderClass .= ' mat-pedido-header';
                                     if ($diaStr === $fechaEntrega) $matHeaderClass .= ' mat-entrega-header';
                                 @endphp
-                                <th class="gen-cell text-center font-medium day-header {{ $esFestivo ? 'festivo-header' : 'text-gray-400' }} {{ $dia->isMonday() ? 'border-l-2 border-blue-200' : '' }}{{ $matHeaderClass }}"
+                                <th class="gen-cell text-center font-medium day-header {{ $esFestivo ? 'festivo-header' : 'text-gray-400' }} {{ $dia->isMonday() ? 'week-start' : '' }}{{ $matHeaderClass }}"
                                     data-date="{{ $dia->format('Y-m-d') }}"
                                     @if($esFestivo) title="{{ $festivos[$diaStr] }}"
                                     @elseif($diaStr === $fechaPedido && $diaStr === $fechaEntrega) title="Pedido + Entrega material"
@@ -364,7 +376,7 @@
                                         elseif ($esPedido) $matClass = 'mat-pedido';
                                         elseif ($esEntrega) $matClass = 'mat-entrega';
                                     @endphp
-                                    <td class="gen-cell text-center day-cell {{ $esFestivo ? 'festivo' : '' }} {{ $matClass }} {{ $dia->isMonday() ? 'border-l-2 border-blue-200' : '' }}"
+                                    <td class="gen-cell text-center day-cell {{ $esFestivo ? 'festivo' : '' }} {{ $matClass }} {{ $dia->isMonday() ? 'week-start' : '' }}"
                                         data-date="{{ $diaStr }}">
                                     </td>
                                 @endforeach
@@ -722,8 +734,11 @@ document.addEventListener('DOMContentLoaded', function() {
             const freshColPos = getColPositions(table);
 
             if (mode === 'move') {
-                const newLeft = parseFloat(bar.style.left);
-                const snappedFirst = snapToColumn(newLeft, freshColPos);
+                // Use the original start column center + pixel delta to find the new snapped column
+                const origCol = freshColPos.find(c => c.date === origFirstDate);
+                const origCenter = origCol ? origCol.left + origCol.width / 2 : origLeft;
+                const dx = parseFloat(bar.style.left) - origLeft;
+                const snappedFirst = snapToColumn(origCenter + dx, freshColPos);
                 const daysMoved = countBusinessDaysBetween(origFirstDate, snappedFirst.date, allDates);
 
                 if (daysMoved === 0) { bar.style.left = origLeft + 'px'; return; }

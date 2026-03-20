@@ -90,10 +90,12 @@
                             S{{ $numSemana }}
                         </th>
                         @if($numSemana == $semanaTotalCol)
+                            <th class="px-2 py-1 text-center font-medium text-gray-600 bg-gray-100 border-l-2 border-gray-400" rowspan="2" style="min-width: 50px;">Jornales<br>Semana</th>
                             <th class="px-2 py-1 text-center font-medium text-gray-600 bg-gray-100 border-l-2 border-gray-400" rowspan="2" style="min-width: 50px;">Total<br>Jornales</th>
                         @endif
                     @endforeach
                     @if(!$semanas->keys()->contains($semanaTotalCol))
+                        <th class="px-2 py-1 text-center font-medium text-gray-600 bg-gray-100 border-l-2 border-gray-400" rowspan="2" style="min-width: 50px;">Jornales<br>Semana</th>
                         <th class="px-2 py-1 text-center font-medium text-gray-600 bg-gray-100 border-l-2 border-gray-400" rowspan="2" style="min-width: 50px;">Total<br>Jornales</th>
                     @endif
                 </tr>
@@ -118,7 +120,7 @@
 
                     {{-- Project header row --}}
                     <tr class="{{ $pi > 0 ? 'proyecto-sep' : '' }}" style="background-color: {{ $proyectoColores[$proyecto->id] ?? '#6b7280' }}15;">
-                        <td class="px-2 py-1.5 font-bold sticky-col" style="background-color: {{ $proyectoColores[$proyecto->id] ?? '#6b7280' }}15;" colspan="{{ count($diasHabiles) + 2 }}">
+                        <td class="px-2 py-1.5 font-bold sticky-col" style="background-color: {{ $proyectoColores[$proyecto->id] ?? '#6b7280' }}15;" colspan="{{ count($diasHabiles) + 3 }}">
                             <span class="inline-block px-2 py-0.5 rounded text-white text-xs font-bold" style="background-color: {{ $proyectoColores[$proyecto->id] ?? '#6b7280' }};">
                                 {{ $proyecto->nombre }}
                             </span>
@@ -133,10 +135,16 @@
                         </td>
                         @php
                             $totalMuebleJornales = 0;
-                            // Pre-calculate total
+                            $jornalesSemanaActual = 0;
+                            // Pre-calculate total and current week
                             foreach ($diasHabiles as $d) {
                                 $eqs = $nominaMap[$mueble->id][$d->format('Y-m-d')] ?? [];
-                                foreach ($eqs as $eq) { $totalMuebleJornales += $eq['count']; }
+                                foreach ($eqs as $eq) {
+                                    $totalMuebleJornales += $eq['count'];
+                                    if ($d->weekOfYear == $semanaActual) {
+                                        $jornalesSemanaActual += $eq['count'];
+                                    }
+                                }
                             }
                             $totalInserted = false;
                         @endphp
@@ -160,11 +168,17 @@
                             @if($idx == $totalColIndex && !$totalInserted)
                                 @php $totalInserted = true; @endphp
                                 <td class="px-2 py-1 text-center font-bold text-gray-700 border-l-2 border-gray-400 bg-gray-100" style="min-width: 50px;">
+                                    {{ $jornalesSemanaActual ?: '-' }}
+                                </td>
+                                <td class="px-2 py-1 text-center font-bold text-gray-700 border-l-2 border-gray-400 bg-gray-100" style="min-width: 50px;">
                                     {{ $totalMuebleJornales ?: '-' }}
                                 </td>
                             @endif
                         @endforeach
                         @if(!$totalInserted)
+                            <td class="px-2 py-1 text-center font-bold text-gray-700 border-l-2 border-gray-400 bg-gray-100" style="min-width: 50px;">
+                                {{ $jornalesSemanaActual ?: '-' }}
+                            </td>
                             <td class="px-2 py-1 text-center font-bold text-gray-700 border-l-2 border-gray-400 bg-gray-100" style="min-width: 50px;">
                                 {{ $totalMuebleJornales ?: '-' }}
                             </td>
