@@ -379,12 +379,23 @@ class NominaController extends Controller
         $mueblesBarnizadosIds = $ultimoBarniz->pluck('mueble_id')->toArray();
 
         // Todos los muebles que han tenido trabajo alguna vez (proyectos activos)
-        $mueblesConTrabajo = Tiempo::join('muebles', 'tiempos.mueble_id', '=', 'muebles.id')
+        // Desde tiempos (proyección)
+        $mueblesConTiempos = Tiempo::join('muebles', 'tiempos.mueble_id', '=', 'muebles.id')
             ->join('proyectos', 'muebles.proyecto_id', '=', 'proyectos.id')
             ->where('proyectos.status', 'activo')
             ->select('tiempos.mueble_id')
             ->distinct()
             ->pluck('mueble_id');
+
+        // Desde nomina_diaria (trabajo real)
+        $mueblesConNomina = NominaDiaria::join('muebles', 'nomina_diaria.mueble_id', '=', 'muebles.id')
+            ->join('proyectos', 'muebles.proyecto_id', '=', 'proyectos.id')
+            ->where('proyectos.status', 'activo')
+            ->select('nomina_diaria.mueble_id')
+            ->distinct()
+            ->pluck('mueble_id');
+
+        $mueblesConTrabajo = $mueblesConTiempos->merge($mueblesConNomina)->unique();
 
         // Filtrar: solo los que NO tienen barniz terminado
         $enProduccionIds = $mueblesConTrabajo->diff($mueblesBarnizadosIds);
