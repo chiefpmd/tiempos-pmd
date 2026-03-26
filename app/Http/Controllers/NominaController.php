@@ -219,11 +219,18 @@ class NominaController extends Controller
         ksort($costoHe);
 
         $proyectosActivos = Proyecto::where('status', 'activo')->orderBy('nombre')
+            ->with('muebles')
             ->get()->keyBy('nombre');
+
+        // Presupuesto por proyecto: suma de costo_mueble
+        $presupuestoPorProyecto = [];
+        foreach ($proyectosActivos as $nombre => $proy) {
+            $presupuestoPorProyecto[$nombre] = $proy->muebles->sum('costo_mueble') ?? 0;
+        }
 
         return view('nomina.reporte', compact(
             'anio', 'semanaInicio', 'semanaFin', 'semanasConDatos',
-            'costoProyectos', 'costoNoProd', 'costoHe', 'totalGeneral',
+            'costoProyectos', 'presupuestoPorProyecto', 'costoNoProd', 'costoHe', 'totalGeneral',
             'proyectosActivos'
         ));
     }
@@ -374,31 +381,10 @@ class NominaController extends Controller
 
         arsort($costoPorProyecto);
 
-        // 7. Muebles en producción: tienen tiempos registrados pero NO han
-        //    terminado barniz (no están en $mueblesBarnizados)
-        $mueblesBarnizadosIds = $ultimoBarniz->pluck('mueble_id')->toArray();
-
-        // Todos los muebles que han tenido trabajo alguna vez (proyectos activos)
-        // Desde tiempos (proyección)
-        $mueblesConTiempos = Tiempo::join('muebles', 'tiempos.mueble_id', '=', 'muebles.id')
-            ->join('proyectos', 'muebles.proyecto_id', '=', 'proyectos.id')
+        // 7. Muebles en producción: todos los muebles de proyectos activos
+        $enProduccionIds = Mueble::join('proyectos', 'muebles.proyecto_id', '=', 'proyectos.id')
             ->where('proyectos.status', 'activo')
-            ->select('tiempos.mueble_id')
-            ->distinct()
-            ->pluck('mueble_id');
-
-        // Desde nomina_diaria (trabajo real)
-        $mueblesConNomina = NominaDiaria::join('muebles', 'nomina_diaria.mueble_id', '=', 'muebles.id')
-            ->join('proyectos', 'muebles.proyecto_id', '=', 'proyectos.id')
-            ->where('proyectos.status', 'activo')
-            ->select('nomina_diaria.mueble_id')
-            ->distinct()
-            ->pluck('mueble_id');
-
-        $mueblesConTrabajo = $mueblesConTiempos->merge($mueblesConNomina)->unique();
-
-        // Filtrar: solo los que NO tienen barniz terminado
-        $enProduccionIds = $mueblesConTrabajo->diff($mueblesBarnizadosIds);
+            ->pluck('muebles.id');
 
         $mueblesEnProduccion = [];
         if ($enProduccionIds->isNotEmpty()) {
@@ -470,8 +456,8 @@ class NominaController extends Controller
                 ];
             }
 
-            // Ordenar por jornales desc
-            usort($mueblesEnProduccion, fn($a, $b) => $b['jornales'] <=> $a['jornales']);
+            // Ordenar por proyecto (alfabético) y luego por mueble
+            usort($mueblesEnProduccion, fn($a, $b) => $a['proyecto'] <=> $b['proyecto'] ?: $a['mueble'] <=> $b['mueble']);
         }
 
         return view('nomina.eficiencia', compact(

@@ -225,42 +225,49 @@
 {{-- Muebles en Producción --}}
 @if(!empty($mueblesEnProduccion))
 <h2 class="text-base font-semibold text-gray-700 mt-6 mb-2">Muebles en Producción ({{ count($mueblesEnProduccion) }}) <span class="text-xs font-normal text-gray-400">— Carpintería + Barniz (proyección) + Otros (nómina) | Sin Instalación</span></h2>
-<div class="bg-white rounded-lg shadow overflow-x-auto mb-6">
+<div class="bg-white rounded-lg shadow overflow-auto max-h-[70vh] mb-6">
     <table class="min-w-full text-xs">
-        <thead class="bg-gray-50">
+        <thead class="bg-gray-50 sticky top-0 z-10">
             <tr>
-                <th class="px-3 py-2 text-left font-medium text-gray-500">Mueble</th>
-                <th class="px-3 py-2 text-left font-medium text-gray-500">Proyecto</th>
-                <th class="px-3 py-2 text-left font-medium text-gray-500">Proyección</th>
-                <th class="px-3 py-2 text-right font-medium text-gray-500">Jornales Presup.</th>
-                <th class="px-3 py-2 text-right font-medium text-gray-500">Jornales Reales</th>
-                <th class="px-3 py-2 text-right font-medium text-gray-500">Costo Nómina</th>
-                <th class="px-3 py-2 text-right font-medium text-gray-500">Valor Mueble</th>
-                <th class="px-3 py-2 text-right font-medium text-gray-500">% Consumido</th>
+                <th class="px-2 py-2 text-left font-medium text-gray-500 bg-gray-50">Mueble</th>
+                <th class="px-2 py-2 text-left font-medium text-gray-500 bg-gray-50">Proyecto</th>
+                <th class="px-2 py-2 text-right font-medium text-gray-500 bg-gray-50">Jor. Presup.</th>
+                <th class="px-2 py-2 text-right font-medium text-gray-500 bg-gray-50">Jor. Reales</th>
+                <th class="px-2 py-2 text-right font-medium text-gray-500 bg-gray-50">Costo Nómina</th>
+                <th class="px-2 py-2 text-right font-medium text-gray-500 bg-gray-50">Valor Mueble</th>
+                <th class="px-2 py-2 text-right font-medium text-gray-500 bg-gray-50">%</th>
             </tr>
         </thead>
         <tbody class="divide-y divide-gray-100">
-            @php $totalJornalesProd = 0; $totalJornalesPresup = 0; $totalCostoProd = 0; $totalValorProd = 0; @endphp
+            @php
+                $totalJornalesProd = 0; $totalJornalesPresup = 0; $totalCostoProd = 0; $totalValorProd = 0;
+                $coloresProyecto = ['bg-blue-50', 'bg-amber-50', 'bg-green-50', 'bg-purple-50', 'bg-rose-50', 'bg-cyan-50', 'bg-orange-50', 'bg-indigo-50'];
+                $proyectoColorMap = []; $colorIdx = 0;
+            @endphp
             @foreach($mueblesEnProduccion as $data)
                 @php
                     $totalJornalesPresup += $data['jornales_presupuesto'];
                     $totalJornalesProd += $data['jornales'];
                     $totalCostoProd += $data['costo_nomina'];
                     $totalValorProd += $data['valor_mueble'];
+                    if (!isset($proyectoColorMap[$data['proyecto']])) {
+                        $proyectoColorMap[$data['proyecto']] = $coloresProyecto[$colorIdx % count($coloresProyecto)];
+                        $colorIdx++;
+                    }
+                    $bgColor = $proyectoColorMap[$data['proyecto']];
                 @endphp
-                <tr class="hover:bg-gray-50">
-                    <td class="px-3 py-1.5 text-gray-800 font-medium">{{ $data['mueble'] }}</td>
-                    <td class="px-3 py-1.5 text-gray-600">{{ $data['proyecto'] }}</td>
-                    <td class="px-3 py-1.5 text-gray-500">{{ $data['procesos'] }}</td>
-                    <td class="px-3 py-1.5 text-right font-mono">
+                <tr class="{{ $bgColor }}">
+                    <td class="px-2 py-1 text-gray-800 font-medium">{{ $data['mueble'] }}</td>
+                    <td class="px-2 py-1 text-gray-600">{{ $data['proyecto'] }}</td>
+                    <td class="px-2 py-1 text-right font-mono">
                         @if($data['jornales_presupuesto'] > 0) {{ number_format($data['jornales_presupuesto'], 1) }} @else <span class="text-gray-400">-</span> @endif
                     </td>
-                    <td class="px-3 py-1.5 text-right font-mono">{{ $data['jornales'] }}</td>
-                    <td class="px-3 py-1.5 text-right font-mono">${{ number_format($data['costo_nomina'], 0) }}</td>
-                    <td class="px-3 py-1.5 text-right font-mono">
+                    <td class="px-2 py-1 text-right font-mono">{{ $data['jornales'] }}</td>
+                    <td class="px-2 py-1 text-right font-mono">${{ number_format($data['costo_nomina'], 0) }}</td>
+                    <td class="px-2 py-1 text-right font-mono">
                         @if($data['valor_mueble'] > 0) ${{ number_format($data['valor_mueble'], 0) }} @else <span class="text-gray-400">-</span> @endif
                     </td>
-                    <td class="px-3 py-1.5 text-right font-mono">
+                    <td class="px-2 py-1 text-right font-mono">
                         @if($data['valor_mueble'] > 0)
                             @php $pct = ($data['costo_nomina'] / $data['valor_mueble']) * 100; @endphp
                             <span class="{{ $pct > 100 ? 'text-red-600 font-semibold' : ($pct > 75 ? 'text-amber-600' : 'text-green-600') }}">{{ number_format($pct, 0) }}%</span>
@@ -271,14 +278,14 @@
                 </tr>
             @endforeach
             <tr class="bg-gray-50 font-semibold">
-                <td class="px-3 py-2 text-gray-700" colspan="3">Total en producción</td>
-                <td class="px-3 py-2 text-right font-mono">{{ $totalJornalesPresup > 0 ? number_format($totalJornalesPresup, 1) : '-' }}</td>
-                <td class="px-3 py-2 text-right font-mono">{{ $totalJornalesProd }}</td>
-                <td class="px-3 py-2 text-right font-mono">${{ number_format($totalCostoProd, 0) }}</td>
-                <td class="px-3 py-2 text-right font-mono">
+                <td class="px-2 py-2 text-gray-700" colspan="2">Total en producción</td>
+                <td class="px-2 py-2 text-right font-mono">{{ $totalJornalesPresup > 0 ? number_format($totalJornalesPresup, 1) : '-' }}</td>
+                <td class="px-2 py-2 text-right font-mono">{{ $totalJornalesProd }}</td>
+                <td class="px-2 py-2 text-right font-mono">${{ number_format($totalCostoProd, 0) }}</td>
+                <td class="px-2 py-2 text-right font-mono">
                     @if($totalValorProd > 0) ${{ number_format($totalValorProd, 0) }} @else <span class="text-gray-400">-</span> @endif
                 </td>
-                <td class="px-3 py-2 text-right font-mono">
+                <td class="px-2 py-2 text-right font-mono">
                     @if($totalValorProd > 0)
                         @php $pctTotal = ($totalCostoProd / $totalValorProd) * 100; @endphp
                         <span class="{{ $pctTotal > 100 ? 'text-red-600 font-semibold' : ($pctTotal > 75 ? 'text-amber-600' : 'text-green-600') }}">{{ number_format($pctTotal, 0) }}%</span>

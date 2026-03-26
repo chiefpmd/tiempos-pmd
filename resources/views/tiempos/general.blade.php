@@ -31,6 +31,8 @@
     .add-mueble-form.active { display: flex; }
     .festivo { background-color: #f3e8ff; }
     .festivo-header { background-color: #e9d5ff; color: #7c3aed; }
+    .current-week { background-color: rgba(59,130,246,0.07); }
+    .current-week-header { background-color: rgba(59,130,246,0.15); }
     .mat-pedido { box-shadow: inset 2px 0 0 0 #ef4444; }
     .mat-entrega { box-shadow: inset -2px 0 0 0 #dc2626; }
     .mat-ambos { box-shadow: inset 2px 0 0 0 #ef4444, inset -2px 0 0 0 #dc2626; }
@@ -273,6 +275,7 @@
                 <table class="min-w-full text-xs">
                     @php
                         $semanas = collect($diasHabiles)->groupBy(fn($d) => $d->weekOfYear);
+                        $semanaActual = now()->weekOfYear;
                         $fechaPedido = $matPedido?->fecha?->format('Y-m-d');
                         $fechaEntrega = $matEntrega?->fecha?->format('Y-m-d');
                     @endphp
@@ -281,7 +284,7 @@
                             <th class="px-2 py-1 sticky left-0 bg-gray-50 z-20" style="min-width:80px"></th>
                             <th class="px-2 py-1 sticky-desc-header bg-gray-50" style="min-width:160px"></th>
                             @foreach($semanas as $numSemana => $diasSemana)
-                                <th class="text-center font-bold text-blue-600 bg-blue-50 week-start text-xs" colspan="{{ count($diasSemana) }}">
+                                <th class="text-center font-bold text-blue-600 {{ $numSemana == $semanaActual ? 'current-week-header' : 'bg-blue-50' }} week-start text-xs" colspan="{{ count($diasSemana) }}">
                                     Sem {{ $numSemana }}
                                 </th>
                             @endforeach
@@ -298,7 +301,7 @@
                                     if ($diaStr === $fechaPedido) $matHeaderClass .= ' mat-pedido-header';
                                     if ($diaStr === $fechaEntrega) $matHeaderClass .= ' mat-entrega-header';
                                 @endphp
-                                <th class="gen-cell text-center font-medium day-header {{ $esFestivo ? 'festivo-header' : 'text-gray-400' }} {{ $dia->isMonday() ? 'week-start' : '' }}{{ $matHeaderClass }}"
+                                <th class="gen-cell text-center font-medium day-header {{ $esFestivo ? 'festivo-header' : 'text-gray-400' }} {{ $dia->isMonday() ? 'week-start' : '' }}{{ $matHeaderClass }} {{ $dia->weekOfYear == $semanaActual ? 'current-week-header' : '' }}"
                                     data-date="{{ $dia->format('Y-m-d') }}"
                                     @if($esFestivo) title="{{ $festivos[$diaStr] }}"
                                     @elseif($diaStr === $fechaPedido && $diaStr === $fechaEntrega) title="Pedido + Entrega material"
@@ -376,7 +379,7 @@
                                         elseif ($esPedido) $matClass = 'mat-pedido';
                                         elseif ($esEntrega) $matClass = 'mat-entrega';
                                     @endphp
-                                    <td class="gen-cell text-center day-cell {{ $esFestivo ? 'festivo' : '' }} {{ $matClass }} {{ $dia->isMonday() ? 'week-start' : '' }}"
+                                    <td class="gen-cell text-center day-cell {{ $esFestivo ? 'festivo' : '' }} {{ $matClass }} {{ $dia->isMonday() ? 'week-start' : '' }} {{ $dia->weekOfYear == $semanaActual ? 'current-week' : '' }}"
                                         data-date="{{ $diaStr }}">
                                     </td>
                                 @endforeach

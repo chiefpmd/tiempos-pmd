@@ -83,7 +83,64 @@ function renderCostoSection($titulo, $datos, $semanasConDatos, $totalGeneral, $p
 }
 @endphp
 
-@php renderCostoSection('Proyectos (Productivo)', $costoProyectos, $semanasConDatos, $totalGeneral, $proyectosActivos, $semanaInicio, $semanaFin, $anio) @endphp
+@if(!empty($costoProyectos))
+<h2 class="text-base font-semibold text-gray-700 mt-6 mb-2">Proyectos (Productivo)</h2>
+<div class="bg-white rounded-lg shadow overflow-x-auto mb-4">
+    <table class="min-w-full text-xs">
+        <thead class="bg-gray-50">
+            <tr>
+                <th class="px-3 py-2 text-left font-medium text-gray-500">Concepto</th>
+                @foreach($semanasConDatos as $sem)
+                    <th class="px-3 py-2 text-right font-medium text-gray-500 min-w-[80px]">Sem {{ $sem }}</th>
+                @endforeach
+                <th class="px-3 py-2 text-right font-medium text-gray-700 min-w-[110px]">Presup. Jor/Proy</th>
+                <th class="px-3 py-2 text-right font-medium text-gray-700 min-w-[90px]">Total</th>
+                <th class="px-3 py-2 text-right font-medium text-gray-400 w-14">%</th>
+            </tr>
+        </thead>
+        <tbody class="divide-y divide-gray-100">
+            @php $subtotal = 0; $subtotalPresupuesto = 0; @endphp
+            @foreach($costoProyectos as $nombre => $semanas)
+                @php
+                    $totalFila = array_sum($semanas);
+                    $subtotal += $totalFila;
+                    $presupuesto = $presupuestoPorProyecto[$nombre] ?? 0;
+                    $subtotalPresupuesto += $presupuesto;
+                    $proy = $proyectosActivos[$nombre] ?? null;
+                @endphp
+                <tr class="hover:bg-gray-50">
+                    @if($proy)
+                        <td class="px-3 py-1.5"><a href="{{ route('nomina.costoMuebles', $proy->id) }}?semana_inicio={{ $semanaInicio }}&semana_fin={{ $semanaFin }}&anio={{ $anio }}" class="text-blue-600 hover:underline">{{ $nombre }}</a></td>
+                    @else
+                        <td class="px-3 py-1.5 text-gray-800">{{ $nombre }}</td>
+                    @endif
+                    @foreach($semanasConDatos as $sem)
+                        @php $val = $semanas[$sem] ?? 0; @endphp
+                        <td class="px-3 py-1.5 text-right font-mono">{{ $val > 0 ? '$' . number_format($val, 2) : '-' }}</td>
+                    @endforeach
+                    <td class="px-3 py-1.5 text-right font-mono font-semibold">{{ $presupuesto > 0 ? '$' . number_format($presupuesto, 0) : '-' }}</td>
+                    <td class="px-3 py-1.5 text-right font-mono font-semibold">${{ number_format($totalFila, 2) }}</td>
+                    <td class="px-3 py-1.5 text-right font-mono {{ $presupuesto > 0 ? (($totalFila / $presupuesto * 100) > 100 ? 'text-red-600 font-semibold' : (($totalFila / $presupuesto * 100) > 75 ? 'text-amber-600' : 'text-green-600')) : 'text-gray-400' }}">
+                        {{ $presupuesto > 0 ? number_format($totalFila / $presupuesto * 100, 1) . '%' : '-' }}
+                    </td>
+                </tr>
+            @endforeach
+            <tr class="bg-gray-50 font-semibold">
+                <td class="px-3 py-1.5 text-gray-700">Subtotal</td>
+                @foreach($semanasConDatos as $sem)
+                    @php $colTotal = 0; foreach($costoProyectos as $semanas) { $colTotal += $semanas[$sem] ?? 0; } @endphp
+                    <td class="px-3 py-1.5 text-right font-mono">{{ $colTotal > 0 ? '$' . number_format($colTotal, 2) : '-' }}</td>
+                @endforeach
+                <td class="px-3 py-1.5 text-right font-mono">{{ $subtotalPresupuesto > 0 ? '$' . number_format($subtotalPresupuesto, 0) : '-' }}</td>
+                <td class="px-3 py-1.5 text-right font-mono">${{ number_format($subtotal, 2) }}</td>
+                <td class="px-3 py-1.5 text-right font-mono {{ $subtotalPresupuesto > 0 ? (($subtotal / $subtotalPresupuesto * 100) > 100 ? 'text-red-600 font-semibold' : 'text-gray-700') : 'text-gray-400' }}">
+                    {{ $subtotalPresupuesto > 0 ? number_format($subtotal / $subtotalPresupuesto * 100, 1) . '%' : '-' }}
+                </td>
+            </tr>
+        </tbody>
+    </table>
+</div>
+@endif
 @php renderCostoSection('No Productivo', $costoNoProd, $semanasConDatos, $totalGeneral) @endphp
 @php renderCostoSection('Horas Extra', $costoHe, $semanasConDatos, $totalGeneral) @endphp
 
