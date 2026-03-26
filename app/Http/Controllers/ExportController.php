@@ -43,6 +43,21 @@ class ExportController extends Controller
         }, $filename, ['Content-Type' => 'text/html']);
     }
 
+    public function exportarProyectoHtml(Proyecto $proyecto, Request $request)
+    {
+        $request->merge(['proyecto' => $proyecto->id, 'desde' => $proyecto->fecha_inicio?->format('Y-m-d')]);
+        $controller = app()->make(\App\Http\Controllers\TiempoController::class);
+        $view = $controller->vistaGeneral($request);
+        $content = $view->render();
+
+        $html = $this->wrapHtml($proyecto->nombre . ' - ' . now()->format('d/m/Y'), $content);
+
+        $filename = str_replace(' ', '_', $proyecto->nombre) . '_' . now()->format('Ymd') . '.html';
+        return response()->streamDownload(function () use ($html) {
+            echo $html;
+        }, $filename, ['Content-Type' => 'text/html']);
+    }
+
     public function exportarDashboardHtml(Request $request)
     {
         $controller = app()->make(\App\Http\Controllers\TiempoController::class);

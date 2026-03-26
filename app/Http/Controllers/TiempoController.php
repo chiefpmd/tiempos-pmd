@@ -580,7 +580,7 @@ class TiempoController extends Controller
 
     public function vistaGeneral(Request $request)
     {
-        $proyectos = Proyecto::where('status', 'activo')
+        $query = Proyecto::where('status', 'activo')
             ->with(['muebles' => function($q) {
                 $q->leftJoin('tiempos', function($join) {
                     $join->on('muebles.id', '=', 'tiempos.mueble_id')
@@ -590,8 +590,13 @@ class TiempoController extends Controller
                 ->groupBy('muebles.id')
                 ->orderByRaw('min_carpinteria IS NULL, min_carpinteria ASC');
             }, 'materiales'])
-            ->orderBy('fecha_inicio')
-            ->get();
+            ->orderBy('fecha_inicio');
+
+        if ($request->filled('proyecto')) {
+            $query->where('id', $request->input('proyecto'));
+        }
+
+        $proyectos = $query->get();
 
         if ($proyectos->isEmpty()) {
             return view('tiempos.general', ['proyectos' => $proyectos, 'diasHabiles' => [], 'tiemposMap' => [], 'ventanaInicio' => null, 'ventanaFin' => null]);

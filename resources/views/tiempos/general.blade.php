@@ -190,6 +190,7 @@
                 <h2 class="text-sm font-bold">{{ $proyecto->nombre }}</h2>
                 <span class="text-xs text-gray-500">({{ $proyecto->muebles->count() }} muebles)</span>
                 <a href="{{ route('captura', $proyecto) }}" class="text-xs text-blue-600 hover:underline">Ir a captura</a>
+                <a href="{{ route('export.proyecto.html', $proyecto) }}" class="text-xs text-gray-500 hover:text-gray-700 hover:underline no-print" title="Descargar HTML de este proyecto">HTML</a>
                 @if($isAdmin)
                     <button class="text-xs text-green-600 hover:underline toggle-add-mueble" data-proyecto="{{ $proyecto->id }}">+ Mueble</button>
                     <button class="text-xs text-purple-600 hover:underline toggle-shift" data-proyecto="{{ $proyecto->id }}">Recorrer fechas</button>
