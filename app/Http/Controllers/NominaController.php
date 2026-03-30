@@ -265,10 +265,17 @@ class NominaController extends Controller
         $finGeneral = Carbon::now()->setISODate($anio, $semanaFin, 7);
 
         // Jornales por mueble por semana (de nomina_diaria con proyecto asignado)
+        // Registros sin mueble (vacaciones, capacitación, etc.) se contabilizan en costos pero no en valor producido
+        $jornalesSinMueble = [];
         $jornalesPorMuebleSemana = [];
         $jornalesTotalPorMueble = [];
         foreach ($registros as $r) {
-            if (!$r->mueble_id || !$r->proyecto_id) continue;
+            if (!$r->proyecto_id) continue;
+            if (!$r->mueble_id) {
+                $sem = $r->semana;
+                $jornalesSinMueble[$sem] = ($jornalesSinMueble[$sem] ?? 0) + 1;
+                continue;
+            }
             $mid = $r->mueble_id;
             $sem = $r->semana;
             $jornalesPorMuebleSemana[$mid][$sem] = ($jornalesPorMuebleSemana[$mid][$sem] ?? 0) + 1;
@@ -368,13 +375,21 @@ class NominaController extends Controller
 
         // Get valor muebles per project (solo muebles que ya pasaron por barniz)
         $mueblesBarnizados = $ultimoBarniz->pluck('mueble_id')->toArray();
+
+        // Single query: get costo_mueble for all barnized muebles at once
+        $allBarnizIds = [];
+        foreach ($costoPorProyecto as $nombre => $data) {
+            $allBarnizIds = array_merge($allBarnizIds, array_intersect($data['mueble_ids'], $mueblesBarnizados));
+        }
+        $costosMuebles = !empty($allBarnizIds)
+            ? Mueble::whereIn('id', array_unique($allBarnizIds))
+                ->whereNotNull('costo_mueble')
+                ->pluck('costo_mueble', 'id')
+            : collect();
+
         foreach ($costoPorProyecto as $nombre => &$data) {
             $idsConBarniz = array_intersect($data['mueble_ids'], $mueblesBarnizados);
-            if (!empty($idsConBarniz)) {
-                $data['valor_muebles'] = Mueble::whereIn('id', $idsConBarniz)
-                    ->whereNotNull('costo_mueble')
-                    ->sum('costo_mueble');
-            }
+            $data['valor_muebles'] = $costosMuebles->only($idsConBarniz)->sum();
             unset($data['mueble_ids']);
         }
         unset($data);

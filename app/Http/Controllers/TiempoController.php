@@ -29,11 +29,23 @@ class TiempoController extends Controller
             ->select('mueble_id', 'proceso',
                 DB::raw('MIN(fecha) as fecha_inicio'),
                 DB::raw('MAX(fecha) as fecha_fin'),
-                DB::raw('MAX(horas) as personas'),
-                DB::raw('(SELECT t2.personal_id FROM tiempos t2 WHERE t2.mueble_id = tiempos.mueble_id AND t2.proceso = tiempos.proceso AND t2.horas > 0 GROUP BY t2.personal_id ORDER BY COUNT(*) DESC LIMIT 1) as personal_id'))
+                DB::raw('MAX(horas) as personas'))
             ->groupBy('mueble_id', 'proceso')
             ->get()
             ->keyBy(fn($r) => "{$r->mueble_id}_{$r->proceso}");
+
+        // Get most frequent personal per mueble+proceso in a single query
+        $topPersonal = Tiempo::whereIn('mueble_id', $muebles->pluck('id'))
+            ->where('horas', '>', 0)
+            ->select('mueble_id', 'proceso', 'personal_id', DB::raw('COUNT(*) as cnt'))
+            ->groupBy('mueble_id', 'proceso', 'personal_id')
+            ->orderByDesc('cnt')
+            ->get()
+            ->groupBy(fn($r) => "{$r->mueble_id}_{$r->proceso}");
+
+        foreach ($rangos as $key => $rango) {
+            $rango->personal_id = $topPersonal->get($key)?->first()?->personal_id;
+        }
 
         return view('tiempos.captura', compact(
             'proyecto', 'muebles', 'personal', 'procesos', 'rangos'
@@ -50,7 +62,7 @@ class TiempoController extends Controller
             'horas' => 'required|numeric|min:0|max:24',
         ]);
 
-        if ((float)$data['horas'] === 0.0) {
+        if ((float)$data['horas'] < 0.01) {
             Tiempo::where([
                 'mueble_id' => $data['mueble_id'],
                 'proceso' => $data['proceso'],
@@ -270,19 +282,29 @@ class TiempoController extends Controller
         // Department totals
         $deptTotals = $todosActivos->groupBy('equipo')->map->count();
 
-        // All tiempos for all active personnel
-        $allTiempos = Tiempo::whereIn('personal_id', $todosIds)
-            ->whereBetween('fecha', [$fechaMin, $fechaMax])
-            ->where('horas', '>', 0)
-            ->with('mueble.proyecto')
-            ->get();
+        // Load only tiempos/nomina for non-leader personnel (leaders already loaded above)
+        $leaderIds = $personal->pluck('id');
+        $nonLeaderIds = $todosIds->diff($leaderIds);
 
-        // All nomina for all active personnel
-        $allNomina = NominaDiaria::whereIn('personal_id', $todosIds)
-            ->whereBetween('fecha', [$fechaMin, $fechaMax])
-            ->whereNotNull('proyecto_id')
-            ->with('proyecto')
-            ->get();
+        $extraTiempos = $nonLeaderIds->isNotEmpty()
+            ? Tiempo::whereIn('personal_id', $nonLeaderIds)
+                ->whereBetween('fecha', [$fechaMin, $fechaMax])
+                ->where('horas', '>', 0)
+                ->with('mueble.proyecto')
+                ->get()
+            : collect();
+
+        $extraNomina = $nonLeaderIds->isNotEmpty()
+            ? NominaDiaria::whereIn('personal_id', $nonLeaderIds)
+                ->whereBetween('fecha', [$fechaMin, $fechaMax])
+                ->whereNotNull('proyecto_id')
+                ->with('proyecto')
+                ->get()
+            : collect();
+
+        // Merge with already-loaded leader data
+        $allTiempos = $tiempos->merge($extraTiempos);
+        $allNomina = $nominaEntries->merge($extraNomina);
 
         // Build per-person per-day: project/process => personas count
         // Sum horas across muebles (1 persona per mueble = N personas total)

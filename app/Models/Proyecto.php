@@ -25,8 +25,9 @@ class Proyecto extends Model
         return $this->hasOne(GanttAnual::class, 'proyecto_id');
     }
 
-    public function getFechaFinAttribute(): \Carbon\Carbon
+    public function getFechaFinAttribute(): ?\Carbon\Carbon
     {
+        if (!$this->fecha_inicio) return null;
         return $this->fecha_inicio->copy()->addWeeks($this->semanas)->subDay();
     }
 }
