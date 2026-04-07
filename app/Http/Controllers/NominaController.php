@@ -475,12 +475,15 @@ class NominaController extends Controller
             usort($mueblesEnProduccion, fn($a, $b) => $a['proyecto'] <=> $b['proyecto'] ?: $a['mueble'] <=> $b['mueble']);
         }
 
+        $costoPorJornalPromedio = $totalJornales > 0 ? $totalCostoProceso / $totalJornales : 0;
+
         return view('nomina.eficiencia', compact(
             'anio', 'semanaInicio', 'semanaFin', 'semanasConDatos',
             'costoNominaPorSemana', 'costoNominaEficiencia', 'valorProducidoPorSemana',
             'totalNomina', 'totalNominaEficiencia', 'totalValor', 'totalMargen', 'totalEficiencia',
             'costoPorProceso', 'totalPorProceso', 'totalCostoProceso', 'totalJornales',
-            'costoPorProyecto', 'mueblesEnProduccion'
+            'costoPorProyecto', 'mueblesEnProduccion',
+            'costoPorJornalPromedio'
         ));
     }
 
