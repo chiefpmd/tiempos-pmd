@@ -28,6 +28,7 @@
                     <a href="{{ route('gantt.anual') }}" class="px-3 py-2 rounded-md text-sm font-medium {{ request()->routeIs('gantt.anual') ? 'bg-gray-900 text-white' : 'text-gray-100 hover:bg-gray-700 hover:text-white' }}">Gantt Anual</a>
                     <a href="{{ route('nomina.semanal') }}" class="px-3 py-2 rounded-md text-sm font-medium {{ request()->routeIs('nomina.semanal') ? 'bg-gray-900 text-white' : 'text-gray-100 hover:bg-gray-700 hover:text-white' }}">Nómina</a>
                     <a href="{{ route('nomina.eficiencia') }}" class="px-3 py-2 rounded-md text-sm font-medium {{ request()->routeIs('nomina.eficiencia') ? 'bg-gray-900 text-white' : 'text-gray-100 hover:bg-gray-700 hover:text-white' }}">Eficiencia</a>
+                    <a href="{{ route('nomina.kpi') }}" class="px-3 py-2 rounded-md text-sm font-medium {{ request()->routeIs('nomina.kpi') ? 'bg-gray-900 text-white' : 'text-gray-100 hover:bg-gray-700 hover:text-white' }}">KPI</a>
 
                     <!-- Dropdown Base de Datos -->
                     <div class="relative" x-data="{ open: false }" @click.away="open = false">

@@ -30,98 +30,6 @@
     $semanasVista = $semanasConDatos->slice(-4)->values();
 @endphp
 
-{{-- Summary Cards --}}
-<div class="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
-    <div class="bg-white rounded-lg shadow p-4 border-l-4 border-red-500">
-        <p class="text-sm text-gray-500">Nómina (muebles con valor)</p>
-        <p class="text-2xl font-bold text-red-600">{{ $totalNominaEficiencia > 0 ? '$' . number_format($totalNominaEficiencia, 0) : 'Sin dato' }}</p>
-        <p class="text-xs text-gray-400 mt-1">Total nómina: ${{ number_format($totalNomina, 0) }}</p>
-    </div>
-    <div class="bg-white rounded-lg shadow p-4 border-l-4 border-green-500">
-        <p class="text-sm text-gray-500">Total Valor Producido</p>
-        <p class="text-2xl font-bold text-green-600">
-            @if($totalValor > 0)
-                ${{ number_format($totalValor, 0) }}
-            @else
-                Sin dato
-            @endif
-        </p>
-    </div>
-    <div class="bg-white rounded-lg shadow p-4 border-l-4 {{ $totalMargen >= 0 ? 'border-green-500' : 'border-red-500' }}">
-        <p class="text-sm text-gray-500">Margen</p>
-        <p class="text-2xl font-bold {{ $totalMargen >= 0 ? 'text-green-600' : 'text-red-600' }}">
-            @if($totalValor > 0)
-                ${{ number_format($totalMargen, 0) }}
-            @else
-                Sin dato
-            @endif
-        </p>
-    </div>
-    <div class="bg-white rounded-lg shadow p-4 border-l-4 {{ $totalEficiencia >= 100 ? 'border-green-500' : 'border-yellow-500' }}">
-        <p class="text-sm text-gray-500">Eficiencia %</p>
-        <p class="text-2xl font-bold {{ $totalEficiencia >= 100 ? 'text-green-600' : 'text-yellow-600' }}">
-            @if($totalValor > 0)
-                {{ number_format($totalEficiencia, 1) }}%
-            @else
-                Sin dato
-            @endif
-        </p>
-    </div>
-</div>
-
-{{-- Weekly Table --}}
-<h2 class="text-base font-semibold text-gray-700 mt-6 mb-2">Eficiencia Semanal <span class="text-xs font-normal text-gray-400">— Solo muebles con valor | 25% del valor = nómina estimada, repartido por jornales</span></h2>
-<div class="bg-white rounded-lg shadow overflow-x-auto mb-6">
-    <table class="min-w-full text-xs">
-        <thead class="bg-gray-50">
-            <tr>
-                <th class="px-3 py-2 text-left font-medium text-gray-500">Semana</th>
-                <th class="px-3 py-2 text-right font-medium text-gray-500">Nómina</th>
-                <th class="px-3 py-2 text-right font-medium text-gray-500">Valor Producido</th>
-                <th class="px-3 py-2 text-right font-medium text-gray-500">Margen</th>
-                <th class="px-3 py-2 text-right font-medium text-gray-500">Eficiencia %</th>
-            </tr>
-        </thead>
-        <tbody class="divide-y divide-gray-100">
-            @foreach($semanasVista as $sem)
-                @php
-                    $nomSem = $costoNominaEficiencia[$sem] ?? 0;
-                    $valSem = $valorProducidoPorSemana[$sem] ?? 0;
-                    $marSem = $valSem - $nomSem;
-                    $efSem = $nomSem > 0 ? ($valSem / $nomSem) * 100 : 0;
-                @endphp
-                <tr class="hover:bg-gray-50 {{ $valSem > 0 ? ($marSem >= 0 ? 'bg-green-50' : 'bg-red-50') : '' }}">
-                    <td class="px-3 py-1.5 text-gray-800 font-medium">Sem {{ $sem }}</td>
-                    <td class="px-3 py-1.5 text-right font-mono">{{ $nomSem > 0 ? '$' . number_format($nomSem, 0) : '-' }}</td>
-                    <td class="px-3 py-1.5 text-right font-mono">
-                        @if($valSem > 0) ${{ number_format($valSem, 0) }} @else <span class="text-gray-400">Sin dato</span> @endif
-                    </td>
-                    <td class="px-3 py-1.5 text-right font-mono {{ $valSem > 0 ? ($marSem >= 0 ? 'text-green-600' : 'text-red-600') : 'text-gray-400' }}">
-                        @if($valSem > 0) ${{ number_format($marSem, 0) }} @else - @endif
-                    </td>
-                    <td class="px-3 py-1.5 text-right font-mono {{ $valSem > 0 ? ($efSem >= 100 ? 'text-green-600' : 'text-yellow-600') : 'text-gray-400' }}">
-                        @if($valSem > 0) {{ number_format($efSem, 1) }}% @else - @endif
-                    </td>
-                </tr>
-            @endforeach
-            {{-- Totals row --}}
-            <tr class="bg-gray-50 font-semibold">
-                <td class="px-3 py-1.5 text-gray-700">Total</td>
-                <td class="px-3 py-1.5 text-right font-mono">{{ $totalNominaEficiencia > 0 ? '$' . number_format($totalNominaEficiencia, 0) : '-' }}</td>
-                <td class="px-3 py-1.5 text-right font-mono">
-                    @if($totalValor > 0) ${{ number_format($totalValor, 0) }} @else <span class="text-gray-400">Sin dato</span> @endif
-                </td>
-                <td class="px-3 py-1.5 text-right font-mono {{ $totalValor > 0 ? ($totalMargen >= 0 ? 'text-green-600' : 'text-red-600') : 'text-gray-400' }}">
-                    @if($totalValor > 0) ${{ number_format($totalMargen, 0) }} @else - @endif
-                </td>
-                <td class="px-3 py-1.5 text-right font-mono {{ $totalValor > 0 ? ($totalEficiencia >= 100 ? 'text-green-600' : 'text-yellow-600') : 'text-gray-400' }}">
-                    @if($totalValor > 0) {{ number_format($totalEficiencia, 1) }}% @else - @endif
-                </td>
-            </tr>
-        </tbody>
-    </table>
-</div>
-
 {{-- Por Proceso Table (jornales por semana) --}}
 @if(!empty($costoPorProceso))
 <h2 class="text-base font-semibold text-gray-700 mt-6 mb-2">Jornales por Proceso</h2>
@@ -168,58 +76,6 @@
     </table>
 </div>
 
-@endif
-
-{{-- Por Proyecto Table --}}
-@if(!empty($costoPorProyecto))
-<h2 class="text-base font-semibold text-gray-700 mt-6 mb-2">Costo por Proyecto</h2>
-<div class="bg-white rounded-lg shadow overflow-x-auto mb-6">
-    <table class="min-w-full text-xs">
-        <thead class="bg-gray-50">
-            <tr>
-                <th class="px-3 py-2 text-left font-medium text-gray-500">Proyecto</th>
-                <th class="px-3 py-2 text-right font-medium text-gray-500">Nómina</th>
-                <th class="px-3 py-2 text-right font-medium text-gray-500">Valor Muebles</th>
-                <th class="px-3 py-2 text-right font-medium text-gray-500">Margen</th>
-                <th class="px-3 py-2 text-right font-medium text-gray-500">%</th>
-            </tr>
-        </thead>
-        <tbody class="divide-y divide-gray-100">
-            @php $totalProjNomina = 0; $totalProjValor = 0; @endphp
-            @foreach($costoPorProyecto as $nombre => $data)
-                @php
-                    $margenProy = $data['valor_muebles'] - $data['nomina'];
-                    $totalProjNomina += $data['nomina'];
-                    $totalProjValor += $data['valor_muebles'];
-                @endphp
-                <tr class="hover:bg-gray-50">
-                    <td class="px-3 py-1.5 text-gray-800">{{ $nombre }}</td>
-                    <td class="px-3 py-1.5 text-right font-mono">${{ number_format($data['nomina'], 0) }}</td>
-                    <td class="px-3 py-1.5 text-right font-mono">
-                        @if($data['valor_muebles'] > 0) ${{ number_format($data['valor_muebles'], 0) }} @else <span class="text-gray-400">Sin dato</span> @endif
-                    </td>
-                    <td class="px-3 py-1.5 text-right font-mono {{ $data['valor_muebles'] > 0 ? ($margenProy >= 0 ? 'text-green-600' : 'text-red-600') : 'text-gray-400' }}">
-                        @if($data['valor_muebles'] > 0) ${{ number_format($margenProy, 0) }} @else - @endif
-                    </td>
-                    <td class="px-3 py-1.5 text-right text-gray-400">
-                        {{ $totalNomina > 0 ? number_format(($data['nomina'] / $totalNomina) * 100, 1) : '0.0' }}%
-                    </td>
-                </tr>
-            @endforeach
-            <tr class="bg-gray-50 font-semibold">
-                <td class="px-3 py-1.5 text-gray-700">Total</td>
-                <td class="px-3 py-1.5 text-right font-mono">${{ number_format($totalProjNomina, 0) }}</td>
-                <td class="px-3 py-1.5 text-right font-mono">
-                    @if($totalProjValor > 0) ${{ number_format($totalProjValor, 0) }} @else <span class="text-gray-400">Sin dato</span> @endif
-                </td>
-                <td class="px-3 py-1.5 text-right font-mono {{ $totalProjValor > 0 ? (($totalProjValor - $totalProjNomina) >= 0 ? 'text-green-600' : 'text-red-600') : 'text-gray-400' }}">
-                    @if($totalProjValor > 0) ${{ number_format($totalProjValor - $totalProjNomina, 0) }} @else - @endif
-                </td>
-                <td class="px-3 py-1.5 text-right text-gray-400">{{ $totalNomina > 0 ? number_format(($totalProjNomina / $totalNomina) * 100, 1) : '0.0' }}%</td>
-            </tr>
-        </tbody>
-    </table>
-</div>
 @endif
 
 {{-- Muebles en Producción --}}
@@ -299,6 +155,58 @@
 </div>
 @else
 <p class="text-gray-400 text-sm mt-6">No hay muebles en producción actualmente.</p>
+@endif
+
+{{-- Por Proyecto Table --}}
+@if(!empty($costoPorProyecto))
+<h2 class="text-base font-semibold text-gray-700 mt-6 mb-2">Costo por Proyecto</h2>
+<div class="bg-white rounded-lg shadow overflow-x-auto mb-6">
+    <table class="min-w-full text-xs">
+        <thead class="bg-gray-50">
+            <tr>
+                <th class="px-3 py-2 text-left font-medium text-gray-500">Proyecto</th>
+                <th class="px-3 py-2 text-right font-medium text-gray-500">Nómina</th>
+                <th class="px-3 py-2 text-right font-medium text-gray-500">Valor Muebles</th>
+                <th class="px-3 py-2 text-right font-medium text-gray-500">Margen</th>
+                <th class="px-3 py-2 text-right font-medium text-gray-500">%</th>
+            </tr>
+        </thead>
+        <tbody class="divide-y divide-gray-100">
+            @php $totalProjNomina = 0; $totalProjValor = 0; @endphp
+            @foreach($costoPorProyecto as $nombre => $data)
+                @php
+                    $margenProy = $data['valor_muebles'] - $data['nomina'];
+                    $totalProjNomina += $data['nomina'];
+                    $totalProjValor += $data['valor_muebles'];
+                @endphp
+                <tr class="hover:bg-gray-50">
+                    <td class="px-3 py-1.5 text-gray-800">{{ $nombre }}</td>
+                    <td class="px-3 py-1.5 text-right font-mono">${{ number_format($data['nomina'], 0) }}</td>
+                    <td class="px-3 py-1.5 text-right font-mono">
+                        @if($data['valor_muebles'] > 0) ${{ number_format($data['valor_muebles'], 0) }} @else <span class="text-gray-400">Sin dato</span> @endif
+                    </td>
+                    <td class="px-3 py-1.5 text-right font-mono {{ $data['valor_muebles'] > 0 ? ($margenProy >= 0 ? 'text-green-600' : 'text-red-600') : 'text-gray-400' }}">
+                        @if($data['valor_muebles'] > 0) ${{ number_format($margenProy, 0) }} @else - @endif
+                    </td>
+                    <td class="px-3 py-1.5 text-right text-gray-400">
+                        {{ $totalNomina > 0 ? number_format(($data['nomina'] / $totalNomina) * 100, 1) : '0.0' }}%
+                    </td>
+                </tr>
+            @endforeach
+            <tr class="bg-gray-50 font-semibold">
+                <td class="px-3 py-1.5 text-gray-700">Total</td>
+                <td class="px-3 py-1.5 text-right font-mono">${{ number_format($totalProjNomina, 0) }}</td>
+                <td class="px-3 py-1.5 text-right font-mono">
+                    @if($totalProjValor > 0) ${{ number_format($totalProjValor, 0) }} @else <span class="text-gray-400">Sin dato</span> @endif
+                </td>
+                <td class="px-3 py-1.5 text-right font-mono {{ $totalProjValor > 0 ? (($totalProjValor - $totalProjNomina) >= 0 ? 'text-green-600' : 'text-red-600') : 'text-gray-400' }}">
+                    @if($totalProjValor > 0) ${{ number_format($totalProjValor - $totalProjNomina, 0) }} @else - @endif
+                </td>
+                <td class="px-3 py-1.5 text-right text-gray-400">{{ $totalNomina > 0 ? number_format(($totalProjNomina / $totalNomina) * 100, 1) : '0.0' }}%</td>
+            </tr>
+        </tbody>
+    </table>
+</div>
 @endif
 
 @endif

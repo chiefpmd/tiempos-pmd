@@ -7,10 +7,11 @@ use Illuminate\Database\Eloquent\Model;
 class Mueble extends Model
 {
     protected $table = 'muebles';
-    protected $fillable = ['proyecto_id', 'numero', 'descripcion', 'costo_mueble', 'jornales_presupuesto', 'fecha_entrega'];
+    protected $fillable = ['proyecto_id', 'numero', 'descripcion', 'costo_mueble', 'presupuesto_nomina', 'jornales_presupuesto', 'fecha_entrega'];
 
     protected $casts = [
         'costo_mueble' => 'decimal:2',
+        'presupuesto_nomina' => 'decimal:2',
         'jornales_presupuesto' => 'decimal:1',
         'fecha_entrega' => 'date',
     ];

@@ -521,6 +521,7 @@ class NominaController extends Controller
     {
         $request->validate([
             'costo_mueble' => 'nullable|numeric|min:0',
+            'presupuesto_nomina' => 'nullable|numeric|min:0',
             'jornales_presupuesto' => 'nullable|numeric|min:0',
         ]);
 
@@ -528,12 +529,230 @@ class NominaController extends Controller
         if ($request->has('costo_mueble')) {
             $fields['costo_mueble'] = $request->costo_mueble;
         }
+        if ($request->has('presupuesto_nomina')) {
+            $fields['presupuesto_nomina'] = $request->presupuesto_nomina;
+        }
         if ($request->has('jornales_presupuesto')) {
             $fields['jornales_presupuesto'] = $request->jornales_presupuesto;
         }
         $mueble->update($fields);
 
-        return response()->json(['ok' => true, 'costo_mueble' => $mueble->costo_mueble, 'jornales_presupuesto' => $mueble->jornales_presupuesto]);
+        return response()->json([
+            'ok' => true,
+            'costo_mueble' => $mueble->costo_mueble,
+            'presupuesto_nomina' => $mueble->presupuesto_nomina,
+            'jornales_presupuesto' => $mueble->jornales_presupuesto,
+        ]);
+    }
+
+    public function kpi(Request $request)
+    {
+        $semanaActual = now()->weekOfYear;
+        $anio = $request->integer('anio', now()->year);
+
+        // All nomina records for the year with mueble assigned
+        $registros = NominaDiaria::with(['personal', 'proyecto', 'mueble'])
+            ->whereNotNull('mueble_id')
+            ->whereNotNull('proyecto_id')
+            ->whereYear('fecha', $anio)
+            ->whereHas('personal', fn($q) => $q->whereNotNull('nomina_bruta_semanal'))
+            ->get();
+
+        if ($registros->isEmpty()) {
+            return view('nomina.kpi', [
+                'anio' => $anio,
+                'semanaActual' => $semanaActual,
+                'wip' => collect(),
+                'terminados' => collect(),
+                'terminadosPorSemana' => [],
+                'totales' => [],
+            ]);
+        }
+
+        // Group by mueble_id and calculate dates per process
+        $muebleIds = $registros->pluck('mueble_id')->unique();
+        $muebles = Mueble::with('proyecto')->whereIn('id', $muebleIds)->get()->keyBy('id');
+
+        // Get project statuses
+        $proyectoStatus = Proyecto::whereIn('id', $registros->pluck('proyecto_id')->unique())
+            ->pluck('status', 'id');
+
+        // Build per-mueble stats from nomina_diaria
+        $muebleStats = [];
+        foreach ($registros as $r) {
+            $mid = $r->mueble_id;
+            $equipo = $r->personal?->equipo ?? 'Otro';
+            $fecha = $r->fecha->format('Y-m-d');
+            $semana = $r->semana;
+
+            if (!isset($muebleStats[$mid])) {
+                $muebleStats[$mid] = [
+                    'jornales' => 0,
+                    'costo' => 0,
+                    'carp_inicio' => null,
+                    'carp_fin' => null,
+                    'barniz_inicio' => null,
+                    'barniz_fin' => null,
+                    'primera_fecha' => null,
+                    'ultima_fecha' => null,
+                    'ultima_semana' => 0,
+                    'equipos' => [],
+                    'proyecto_id' => $r->proyecto_id,
+                ];
+            }
+
+            $muebleStats[$mid]['jornales']++;
+            $muebleStats[$mid]['costo'] += $r->costo_dia + $r->costo_he;
+            $muebleStats[$mid]['equipos'][$equipo] = true;
+
+            // Track earliest/latest dates per process
+            if ($equipo === 'Carpintería') {
+                if (!$muebleStats[$mid]['carp_inicio'] || $fecha < $muebleStats[$mid]['carp_inicio']) {
+                    $muebleStats[$mid]['carp_inicio'] = $fecha;
+                }
+                if (!$muebleStats[$mid]['carp_fin'] || $fecha > $muebleStats[$mid]['carp_fin']) {
+                    $muebleStats[$mid]['carp_fin'] = $fecha;
+                }
+            } elseif ($equipo === 'Barniz') {
+                if (!$muebleStats[$mid]['barniz_inicio'] || $fecha < $muebleStats[$mid]['barniz_inicio']) {
+                    $muebleStats[$mid]['barniz_inicio'] = $fecha;
+                }
+                if (!$muebleStats[$mid]['barniz_fin'] || $fecha > $muebleStats[$mid]['barniz_fin']) {
+                    $muebleStats[$mid]['barniz_fin'] = $fecha;
+                }
+            }
+
+            if (!$muebleStats[$mid]['primera_fecha'] || $fecha < $muebleStats[$mid]['primera_fecha']) {
+                $muebleStats[$mid]['primera_fecha'] = $fecha;
+            }
+            if (!$muebleStats[$mid]['ultima_fecha'] || $fecha > $muebleStats[$mid]['ultima_fecha']) {
+                $muebleStats[$mid]['ultima_fecha'] = $fecha;
+            }
+            if ($semana > $muebleStats[$mid]['ultima_semana']) {
+                $muebleStats[$mid]['ultima_semana'] = $semana;
+            }
+        }
+
+        // Classify muebles
+        $wip = collect();
+        $terminados = collect();
+        $terminadosPorSemana = [];
+
+        foreach ($muebleStats as $mid => $stats) {
+            $mueble = $muebles->get($mid);
+            if (!$mueble) continue;
+
+            $tieneCarp = $stats['carp_inicio'] !== null;
+            $tieneBarniz = $stats['barniz_inicio'] !== null;
+
+            // Calculate lead times
+            $leadCarp = null;
+            if ($stats['carp_inicio'] && $stats['carp_fin']) {
+                $leadCarp = Carbon::parse($stats['carp_inicio'])->diffInWeekdays(Carbon::parse($stats['carp_fin'])) + 1;
+            }
+
+            $leadBarniz = null;
+            if ($stats['barniz_inicio'] && $stats['barniz_fin']) {
+                $leadBarniz = Carbon::parse($stats['barniz_inicio'])->diffInWeekdays(Carbon::parse($stats['barniz_fin'])) + 1;
+            }
+
+            $diasEspera = null;
+            if ($stats['carp_fin'] && $stats['barniz_inicio']) {
+                $diasEspera = Carbon::parse($stats['carp_fin'])->diffInWeekdays(Carbon::parse($stats['barniz_inicio']));
+                if (Carbon::parse($stats['barniz_inicio'])->lte(Carbon::parse($stats['carp_fin']))) {
+                    $diasEspera = 0;
+                }
+            }
+
+            // Lead total: use carp/barniz if available, otherwise first/last general date
+            $inicio = $stats['carp_inicio'] ?? $stats['barniz_inicio'] ?? $stats['primera_fecha'];
+            $fin = $stats['barniz_fin'] ?? $stats['carp_fin'] ?? $stats['ultima_fecha'];
+            $leadTotal = null;
+            if ($inicio && $fin) {
+                $leadTotal = Carbon::parse($inicio)->diffInWeekdays(Carbon::parse($fin)) + 1;
+            }
+
+            // Equipos as string
+            $equiposStr = implode(', ', array_keys($stats['equipos']));
+
+            $row = [
+                'mueble' => $mueble->numero . ' - ' . $mueble->descripcion,
+                'proyecto' => $mueble->proyecto?->nombre ?? 'Sin Proyecto',
+                'jornales' => $stats['jornales'],
+                'jornales_presupuesto' => $mueble->jornales_presupuesto ?? 0,
+                'costo' => $stats['costo'],
+                'valor_mueble' => (float) ($mueble->costo_mueble ?? 0),
+                'carp_inicio' => $stats['carp_inicio'],
+                'carp_fin' => $stats['carp_fin'],
+                'barniz_inicio' => $stats['barniz_inicio'],
+                'barniz_fin' => $stats['barniz_fin'],
+                'lead_carp' => $leadCarp,
+                'lead_barniz' => $leadBarniz,
+                'dias_espera' => $diasEspera,
+                'lead_total' => $leadTotal,
+                'ultima_semana' => $stats['ultima_semana'],
+                'equipos' => $equiposStr,
+            ];
+
+            // Terminado: proyecto completado, OR (tiene barniz y dejó de aparecer hace > 1 semana)
+            $proyectoCompletado = ($proyectoStatus[$stats['proyecto_id']] ?? '') === 'completado';
+            $barnizAntiguo = $tieneBarniz && $stats['ultima_semana'] < ($semanaActual - 1);
+            $esTerminado = $proyectoCompletado || $barnizAntiguo;
+
+            if ($esTerminado) {
+                $terminados->push($row);
+                $semFin = Carbon::parse($stats['ultima_fecha'])->weekOfYear;
+                if (!isset($terminadosPorSemana[$semFin])) {
+                    $terminadosPorSemana[$semFin] = ['count' => 0, 'valor' => 0, 'jornales' => 0];
+                }
+                $terminadosPorSemana[$semFin]['count']++;
+                $terminadosPorSemana[$semFin]['valor'] += (float) ($mueble->costo_mueble ?? 0);
+                $terminadosPorSemana[$semFin]['jornales'] += $stats['jornales'];
+            } else {
+                $wip->push($row);
+            }
+        }
+
+        // Sort
+        $wip = $wip->sortBy('proyecto')->values();
+        $terminados = $terminados->sortByDesc('barniz_fin')->values();
+        ksort($terminadosPorSemana);
+
+        // Totales — lead times only from muebles that had carp/barniz (meaningful data)
+        $totalWip = $wip->count();
+        $totalTerminados = $terminados->count();
+        $terminadosConCarp = $terminados->where('lead_carp', '>', 0);
+        $terminadosConBarniz = $terminados->where('lead_barniz', '>', 0);
+        $avgLeadTotal = $terminados->where('lead_total', '>', 0)->avg('lead_total');
+        $avgLeadCarp = $terminadosConCarp->avg('lead_carp');
+        $avgLeadBarniz = $terminadosConBarniz->avg('lead_barniz');
+        $avgEspera = $terminados->where('dias_espera', '>=', 0)->avg('dias_espera');
+        $terminadosSemanaActual = ($terminadosPorSemana[$semanaActual]['count'] ?? 0);
+        $terminadosSemanaAnterior = ($terminadosPorSemana[$semanaActual - 1]['count'] ?? 0);
+        $ratioWip = $totalTerminados > 0 ? round($totalWip / $totalTerminados, 1) : $totalWip;
+
+        // Accuracy: muebles terminados con jornales_presupuesto
+        $terminadosConPresup = $terminados->where('jornales_presupuesto', '>', 0);
+        $avgAccuracy = 0;
+        if ($terminadosConPresup->count() > 0) {
+            $avgAccuracy = $terminadosConPresup->avg(fn($m) => ($m['jornales'] / $m['jornales_presupuesto']) * 100);
+        }
+
+        $totales = [
+            'wip' => $totalWip,
+            'terminados' => $totalTerminados,
+            'terminados_semana' => $terminadosSemanaActual + $terminadosSemanaAnterior,
+            'ratio_wip' => $ratioWip,
+            'avg_lead_total' => round($avgLeadTotal ?? 0, 1),
+            'avg_lead_carp' => round($avgLeadCarp ?? 0, 1),
+            'avg_lead_barniz' => round($avgLeadBarniz ?? 0, 1),
+            'avg_espera' => round($avgEspera ?? 0, 1),
+            'accuracy' => round($avgAccuracy, 0),
+        ];
+
+        return view('nomina.kpi', compact(
+            'anio', 'semanaActual', 'wip', 'terminados', 'terminadosPorSemana', 'totales'
+        ));
     }
 
     public function exportarReporte(Request $request)
