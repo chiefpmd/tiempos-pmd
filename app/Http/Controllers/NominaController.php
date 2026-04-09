@@ -526,6 +526,7 @@ class NominaController extends Controller
             'costo_mueble' => 'nullable|numeric|min:0',
             'presupuesto_nomina' => 'nullable|numeric|min:0',
             'jornales_presupuesto' => 'nullable|numeric|min:0',
+            'avance_porcentaje' => 'nullable|numeric|min:0|max:100',
         ]);
 
         $fields = [];
@@ -538,6 +539,9 @@ class NominaController extends Controller
         if ($request->has('jornales_presupuesto')) {
             $fields['jornales_presupuesto'] = $request->jornales_presupuesto;
         }
+        if ($request->has('avance_porcentaje')) {
+            $fields['avance_porcentaje'] = $request->avance_porcentaje;
+        }
         $mueble->update($fields);
 
         return response()->json([
@@ -545,6 +549,7 @@ class NominaController extends Controller
             'costo_mueble' => $mueble->costo_mueble,
             'presupuesto_nomina' => $mueble->presupuesto_nomina,
             'jornales_presupuesto' => $mueble->jornales_presupuesto,
+            'avance_porcentaje' => $mueble->avance_porcentaje,
         ]);
     }
 
@@ -864,5 +869,114 @@ class NominaController extends Controller
             'canGoBack', 'prevDesde', 'nextDesde', 'todayDesde', 'allDesde',
             'proyectoColores', 'equipoColores'
         ));
+    }
+
+    public function reporteMensual(Request $request)
+    {
+        $mes = $request->integer('mes', now()->month);
+        $anio = $request->integer('anio', now()->year);
+
+        $fechaInicio = Carbon::create($anio, $mes, 1)->startOfMonth();
+        $fechaFin = $fechaInicio->copy()->endOfMonth();
+        $nombreMes = $fechaInicio->translatedFormat('F Y');
+
+        $departamentos = ['Carpintería', 'Barniz'];
+
+        $data = [];
+        foreach ($departamentos as $depto) {
+            // Registros con proyecto asignado
+            $registros = NominaDiaria::with(['proyecto', 'mueble', 'personal'])
+                ->whereHas('personal', fn($q) => $q->where('equipo', $depto))
+                ->whereBetween('fecha', [$fechaInicio, $fechaFin])
+                ->whereNotNull('proyecto_id')
+                ->get();
+
+            $porProyecto = [];
+            foreach ($registros as $r) {
+                $proyNombre = $r->proyecto->nombre ?? 'Sin proyecto';
+                $proyAbrev = $r->proyecto->abreviacion ?? '';
+                $proyKey = $r->proyecto_id;
+
+                if (!isset($porProyecto[$proyKey])) {
+                    $porProyecto[$proyKey] = [
+                        'nombre' => $proyNombre,
+                        'abreviacion' => $proyAbrev,
+                        'proyecto_id' => $proyKey,
+                        'jornales' => 0,
+                        'costo' => 0,
+                        'personal' => [],
+                        'muebles' => [],
+                    ];
+                }
+
+                $porProyecto[$proyKey]['jornales']++;
+                $porProyecto[$proyKey]['costo'] += $r->costo_total;
+                $porProyecto[$proyKey]['personal'][$r->personal_id] = $r->personal->nombre;
+
+                if ($r->mueble_id) {
+                    $mKey = $r->mueble_id;
+                    if (!isset($porProyecto[$proyKey]['muebles'][$mKey])) {
+                        $porProyecto[$proyKey]['muebles'][$mKey] = [
+                            'numero' => $r->mueble->numero,
+                            'descripcion' => $r->mueble->descripcion,
+                            'jornales' => 0,
+                            'costo' => 0,
+                            'personal' => [],
+                            'jornales_presupuesto' => $r->mueble->jornales_presupuesto ?? 0,
+                            'avance_porcentaje' => $r->mueble->avance_porcentaje,
+                            'costo_mueble' => (float) ($r->mueble->costo_mueble ?? 0),
+                            'mueble_id' => $r->mueble_id,
+                        ];
+                    }
+                    $porProyecto[$proyKey]['muebles'][$mKey]['jornales']++;
+                    $porProyecto[$proyKey]['muebles'][$mKey]['costo'] += $r->costo_total;
+                    $porProyecto[$proyKey]['muebles'][$mKey]['personal'][$r->personal_id] = $r->personal->nombre;
+                }
+            }
+
+            // Sort projects by name, muebles by numero
+            uasort($porProyecto, fn($a, $b) => strcmp($a['nombre'], $b['nombre']));
+            foreach ($porProyecto as &$proy) {
+                uasort($proy['muebles'], fn($a, $b) => strcmp($a['numero'], $b['numero']));
+            }
+
+            // Categorías (sin proyecto)
+            $categorias = NominaDiaria::with(['categoria', 'personal'])
+                ->whereHas('personal', fn($q) => $q->where('equipo', $depto))
+                ->whereBetween('fecha', [$fechaInicio, $fechaFin])
+                ->whereNull('proyecto_id')
+                ->get();
+
+            $porCategoria = [];
+            foreach ($categorias as $r) {
+                $catNombre = $r->categoria->nombre ?? 'Sin categoría';
+                if (!isset($porCategoria[$catNombre])) {
+                    $porCategoria[$catNombre] = ['jornales' => 0, 'personal' => []];
+                }
+                $porCategoria[$catNombre]['jornales']++;
+                $porCategoria[$catNombre]['personal'][$r->personal_id] = $r->personal->nombre;
+            }
+            ksort($porCategoria);
+
+            $jornalesProyecto = $registros->count();
+            $jornalesCategoria = $categorias->count();
+            $totalJornales = $jornalesProyecto + $jornalesCategoria;
+            $costoProyecto = $registros->sum(fn($r) => $r->costo_total);
+            $costoCategoria = $categorias->sum(fn($r) => $r->costo_total);
+            $totalCosto = $costoProyecto + $costoCategoria;
+
+            $data[$depto] = [
+                'proyectos' => $porProyecto,
+                'categorias' => $porCategoria,
+                'totalJornales' => $totalJornales,
+                'totalCosto' => $totalCosto,
+                'jornalesProyecto' => $jornalesProyecto,
+                'jornalesCategoria' => $jornalesCategoria,
+                'costoProyecto' => $costoProyecto,
+                'costoCategoria' => $costoCategoria,
+            ];
+        }
+
+        return view('nomina.reporte-mensual', compact('data', 'mes', 'anio', 'nombreMes', 'departamentos'));
     }
 }
