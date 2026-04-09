@@ -865,4 +865,101 @@ class NominaController extends Controller
             'proyectoColores', 'equipoColores'
         ));
     }
+
+    public function produccionMensual(Request $request)
+    {
+        $mes = $request->integer('mes', now()->month);
+        $anio = $request->integer('anio', now()->year);
+        $personalFiltro = $request->integer('personal_id', 0);
+
+        $fechaInicio = Carbon::createFromDate($anio, $mes, 1)->startOfMonth();
+        $fechaFin = $fechaInicio->copy()->endOfMonth();
+
+        $mesesEs = [1=>'Enero',2=>'Febrero',3=>'Marzo',4=>'Abril',5=>'Mayo',6=>'Junio',
+                    7=>'Julio',8=>'Agosto',9=>'Septiembre',10=>'Octubre',11=>'Noviembre',12=>'Diciembre'];
+        $nombreMes = $mesesEs[$mes] . ' ' . $anio;
+
+        $query = NominaDiaria::with(['personal', 'proyecto', 'mueble'])
+            ->whereBetween('fecha', [$fechaInicio->format('Y-m-d'), $fechaFin->format('Y-m-d')])
+            ->whereNotNull('proyecto_id')
+            ->whereHas('personal', fn($q) => $q->whereNotNull('nomina_bruta_semanal'));
+
+        if ($personalFiltro) {
+            $query->where('personal_id', $personalFiltro);
+        }
+
+        $registros = $query->get();
+
+        $todosEmpleados = Personal::where('activo', true)->orderBy('equipo')->orderBy('nombre')->get();
+
+        // Agrupar por trabajador
+        $porTrabajador = [];
+        $totalesGlobal = ['jornadas' => 0, 'costo' => 0];
+
+        foreach ($registros as $r) {
+            $pid = $r->personal_id;
+            $nombre = $r->personal?->nombre ?? 'Sin nombre';
+            $equipo = $r->personal?->equipo ?? 'Sin equipo';
+
+            if (!isset($porTrabajador[$pid])) {
+                $porTrabajador[$pid] = [
+                    'nombre' => $nombre,
+                    'equipo' => $equipo,
+                    'muebles' => [],
+                    'total_jornadas' => 0,
+                    'total_costo' => 0,
+                ];
+            }
+
+            $proyecto = $r->proyecto?->nombre ?? 'Sin proyecto';
+            $muebleNum = $r->mueble?->numero ?? 'Sin mueble';
+            $muebleDesc = $r->mueble?->descripcion ?? '';
+            $muebleId = $r->mueble_id ?? 0;
+            $key = $r->proyecto_id . '-' . $muebleId;
+
+            if (!isset($porTrabajador[$pid]['muebles'][$key])) {
+                $porTrabajador[$pid]['muebles'][$key] = [
+                    'proyecto' => $proyecto,
+                    'numero' => $muebleNum,
+                    'descripcion' => $muebleDesc,
+                    'jornadas' => 0,
+                    'costo' => 0,
+                    'fechas' => [],
+                ];
+            }
+
+            $costoDia = $r->costo_dia + $r->costo_he;
+            $porTrabajador[$pid]['muebles'][$key]['jornadas']++;
+            $porTrabajador[$pid]['muebles'][$key]['costo'] += $costoDia;
+            $porTrabajador[$pid]['muebles'][$key]['fechas'][] = $r->fecha->format('d');
+            $porTrabajador[$pid]['total_jornadas']++;
+            $porTrabajador[$pid]['total_costo'] += $costoDia;
+            $totalesGlobal['jornadas']++;
+            $totalesGlobal['costo'] += $costoDia;
+        }
+
+        // Ordenar por equipo y nombre
+        uasort($porTrabajador, fn($a, $b) =>
+            strcmp($a['equipo'], $b['equipo']) ?: strcmp($a['nombre'], $b['nombre'])
+        );
+
+        // Resumen por proyecto
+        $porProyecto = [];
+        foreach ($registros as $r) {
+            $pNombre = $r->proyecto?->nombre ?? 'Sin proyecto';
+            if (!isset($porProyecto[$pNombre])) {
+                $porProyecto[$pNombre] = ['trabajadores' => [], 'muebles' => [], 'jornadas' => 0, 'costo' => 0];
+            }
+            $porProyecto[$pNombre]['trabajadores'][$r->personal_id] = true;
+            if ($r->mueble_id) $porProyecto[$pNombre]['muebles'][$r->mueble_id] = true;
+            $porProyecto[$pNombre]['jornadas']++;
+            $porProyecto[$pNombre]['costo'] += $r->costo_dia + $r->costo_he;
+        }
+        arsort($porProyecto);
+
+        return view('nomina.produccion-mensual', compact(
+            'mes', 'anio', 'nombreMes', 'personalFiltro',
+            'porTrabajador', 'porProyecto', 'totalesGlobal', 'todosEmpleados'
+        ));
+    }
 }
