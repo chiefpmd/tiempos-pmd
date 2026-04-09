@@ -40,7 +40,6 @@
                             <a href="{{ route('proyectos.index') }}" class="block px-4 py-2 text-sm {{ request()->routeIs('proyectos.*') ? 'bg-gray-900 text-white' : 'text-gray-100 hover:bg-gray-600' }}">Proyectos</a>
                             <a href="{{ route('personal.index') }}" class="block px-4 py-2 text-sm {{ request()->routeIs('personal.*') ? 'bg-gray-900 text-white' : 'text-gray-100 hover:bg-gray-600' }}">Personal</a>
                             <a href="{{ route('nomina.reporte') }}" class="block px-4 py-2 text-sm {{ request()->routeIs('nomina.reporte') ? 'bg-gray-900 text-white' : 'text-gray-100 hover:bg-gray-600' }}">Costo x Proyecto</a>
-                            <a href="{{ route('nomina.produccionMensual') }}" class="block px-4 py-2 text-sm {{ request()->routeIs('nomina.produccionMensual') ? 'bg-gray-900 text-white' : 'text-gray-100 hover:bg-gray-600' }}">Produccion x Trabajador</a>
                             @if(auth()->user()->isAdmin())
                                 <a href="{{ route('festivos.index') }}" class="block px-4 py-2 text-sm {{ request()->routeIs('festivos.*') ? 'bg-gray-900 text-white' : 'text-gray-100 hover:bg-gray-600' }}">Festivos</a>
                                 <a href="{{ route('nomina.categorias') }}" class="block px-4 py-2 text-sm {{ request()->routeIs('nomina.categorias') ? 'bg-gray-900 text-white' : 'text-gray-100 hover:bg-gray-600' }}">Cat. Nómina</a>
