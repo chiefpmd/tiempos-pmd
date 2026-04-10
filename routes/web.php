@@ -90,8 +90,7 @@ Route::middleware('auth')->group(function () {
     Route::get('/nomina/reporte', [NominaController::class, 'reporte'])->name('nomina.reporte');
     Route::get('/nomina/reporte/exportar', [NominaController::class, 'exportarReporte'])->name('nomina.exportar');
     Route::get('/nomina/eficiencia', [NominaController::class, 'eficiencia'])->name('nomina.eficiencia');
-    Route::get('/nomina/kpi', [NominaController::class, 'kpi'])->name('nomina.kpi');
-    Route::get('/nomina/reporte-mensual', [NominaController::class, 'reporteMensual'])->name('nomina.reporteMensual');
+Route::get('/nomina/reporte-mensual', [NominaController::class, 'reporteMensual'])->name('nomina.reporteMensual');
     Route::get('/nomina/buscar-mueble', [NominaController::class, 'buscarMueble'])->name('nomina.buscarMueble');
     Route::get('/nomina/costo-muebles/{proyecto}', [NominaController::class, 'costoMuebles'])->name('nomina.costoMuebles');
 });
