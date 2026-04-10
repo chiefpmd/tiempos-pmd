@@ -7,6 +7,7 @@ use App\Models\CategoriaNomina;
 use App\Models\NominaDiaria;
 use App\Models\Personal;
 use App\Models\Mueble;
+use App\Models\MuebleAvanceMensual;
 use App\Models\Proyecto;
 use App\Models\Tiempo;
 use App\Models\DiaFestivo;
@@ -59,6 +60,14 @@ class NominaController extends Controller
 
         $proyectos = Proyecto::where('status', 'activo')->orderBy('nombre')->get();
         $categorias = CategoriaNomina::where('activa', true)->orderBy('nombre')->get();
+
+        // Incluir proyectos no activos que ya tienen registros en esta semana
+        $proyectoIdsUsados = $registros->pluck('proyecto_id')->filter()->unique()
+            ->diff($proyectos->pluck('id'));
+        if ($proyectoIdsUsados->isNotEmpty()) {
+            $proyectosExtra = Proyecto::whereIn('id', $proyectoIdsUsados)->orderBy('nombre')->get();
+            $proyectos = $proyectos->merge($proyectosExtra)->sortBy('nombre')->values();
+        }
 
         $mueblesPorProyecto = Mueble::whereIn('proyecto_id', $proyectos->pluck('id'))
             ->orderBy('numero')
@@ -526,7 +535,8 @@ class NominaController extends Controller
             'costo_mueble' => 'nullable|numeric|min:0',
             'presupuesto_nomina' => 'nullable|numeric|min:0',
             'jornales_presupuesto' => 'nullable|numeric|min:0',
-            'avance_porcentaje' => 'nullable|numeric|min:0|max:100',
+            'avance_carpinteria' => 'nullable|numeric|min:0|max:100',
+            'avance_barniz' => 'nullable|numeric|min:0|max:100',
         ]);
 
         $fields = [];
@@ -539,17 +549,39 @@ class NominaController extends Controller
         if ($request->has('jornales_presupuesto')) {
             $fields['jornales_presupuesto'] = $request->jornales_presupuesto;
         }
-        if ($request->has('avance_porcentaje')) {
-            $fields['avance_porcentaje'] = $request->avance_porcentaje;
-        }
         $mueble->update($fields);
+
+        // Guardar avance en tabla mensual si viene mes/anio
+        if ($request->has('mes') && $request->has('anio')) {
+            $avanceFields = [];
+            if ($request->has('avance_carpinteria')) {
+                $avanceFields['avance_carpinteria'] = $request->avance_carpinteria;
+            }
+            if ($request->has('avance_barniz')) {
+                $avanceFields['avance_barniz'] = $request->avance_barniz;
+            }
+            if (!empty($avanceFields)) {
+                $avMensual = MuebleAvanceMensual::firstOrCreate(
+                    ['mueble_id' => $mueble->id, 'anio' => $request->anio, 'mes' => $request->mes],
+                );
+                $avMensual->update($avanceFields);
+            }
+        }
+
+        // Cargar avance del mes solicitado
+        $avMes = null;
+        if ($request->has('mes') && $request->has('anio')) {
+            $avMes = MuebleAvanceMensual::where('mueble_id', $mueble->id)
+                ->where('anio', $request->anio)->where('mes', $request->mes)->first();
+        }
 
         return response()->json([
             'ok' => true,
             'costo_mueble' => $mueble->costo_mueble,
             'presupuesto_nomina' => $mueble->presupuesto_nomina,
             'jornales_presupuesto' => $mueble->jornales_presupuesto,
-            'avance_porcentaje' => $mueble->avance_porcentaje,
+            'avance_carpinteria' => $avMes->avance_carpinteria ?? $mueble->avance_carpinteria,
+            'avance_barniz' => $avMes->avance_barniz ?? $mueble->avance_barniz,
         ]);
     }
 
@@ -882,6 +914,13 @@ class NominaController extends Controller
 
         $departamentos = ['Carpintería', 'Barniz'];
 
+        // Cargar avances mensuales: mes actual y mes anterior
+        $mesAnterior = $fechaInicio->copy()->subMonth();
+        $avancesActual = MuebleAvanceMensual::where('anio', $anio)->where('mes', $mes)
+            ->get()->keyBy('mueble_id');
+        $avancesPrev = MuebleAvanceMensual::where('anio', $mesAnterior->year)->where('mes', $mesAnterior->month)
+            ->get()->keyBy('mueble_id');
+
         $data = [];
         foreach ($departamentos as $depto) {
             // Registros con proyecto asignado
@@ -916,6 +955,11 @@ class NominaController extends Controller
                 if ($r->mueble_id) {
                     $mKey = $r->mueble_id;
                     if (!isset($porProyecto[$proyKey]['muebles'][$mKey])) {
+                        $avMes = $avancesActual->get($mKey);
+                        $avPrev = $avancesPrev->get($mKey);
+                        // Solo mostrar avance si hay registro del mes actual
+                        $prevCarp = $avPrev ? (float) ($avPrev->avance_carpinteria ?? 0) : 0;
+                        $prevBarn = $avPrev ? (float) ($avPrev->avance_barniz ?? 0) : 0;
                         $porProyecto[$proyKey]['muebles'][$mKey] = [
                             'numero' => $r->mueble->numero,
                             'descripcion' => $r->mueble->descripcion,
@@ -923,7 +967,10 @@ class NominaController extends Controller
                             'costo' => 0,
                             'personal' => [],
                             'jornales_presupuesto' => $r->mueble->jornales_presupuesto ?? 0,
-                            'avance_porcentaje' => $r->mueble->avance_porcentaje,
+                            'avance_carpinteria' => $avMes ? $avMes->avance_carpinteria : null,
+                            'avance_barniz' => $avMes ? $avMes->avance_barniz : null,
+                            'prev_carpinteria' => $prevCarp,
+                            'prev_barniz' => $prevBarn,
                             'costo_mueble' => (float) ($r->mueble->costo_mueble ?? 0),
                             'mueble_id' => $r->mueble_id,
                         ];
@@ -935,9 +982,26 @@ class NominaController extends Controller
             }
 
             // Sort projects by name, muebles by numero
-            uasort($porProyecto, fn($a, $b) => strcmp($a['nombre'], $b['nombre']));
+            uasort($porProyecto, fn($a, $b) => strcmp($a['nombre'], $b['nombre']) ?: ($a['proyecto_id'] <=> $b['proyecto_id']));
             foreach ($porProyecto as &$proy) {
-                uasort($proy['muebles'], fn($a, $b) => strcmp($a['numero'], $b['numero']));
+                uasort($proy['muebles'], fn($a, $b) => strcmp($a['numero'], $b['numero']) ?: ($a['mueble_id'] <=> $b['mueble_id']));
+            }
+            unset($proy);
+
+            // Calcular producción avanzada por proyecto (delta vs mes anterior)
+            $campoAvance = $depto === 'Carpintería' ? 'avance_carpinteria' : 'avance_barniz';
+            $campoPrev = $depto === 'Carpintería' ? 'prev_carpinteria' : 'prev_barniz';
+            foreach ($porProyecto as $k => $proy) {
+                $prodProy = 0;
+                foreach ($proy['muebles'] as $m) {
+                    $avance = (float) ($m[$campoAvance] ?? 0);
+                    $prev = (float) ($m[$campoPrev] ?? 0);
+                    $delta = $avance - $prev;
+                    if ($delta > 0 && ($m['costo_mueble'] ?? 0) > 0) {
+                        $prodProy += $m['costo_mueble'] * $delta / 100;
+                    }
+                }
+                $porProyecto[$k]['prod_avanzada'] = $prodProy;
             }
 
             // Categorías (sin proyecto)
@@ -977,6 +1041,77 @@ class NominaController extends Controller
             ];
         }
 
-        return view('nomina.reporte-mensual', compact('data', 'mes', 'anio', 'nombreMes', 'departamentos'));
+        // Producción avanzada: muebles únicos, delta vs mes anterior
+        $mueblesVistos = [];
+        $totalProdAvanzada = 0;
+        $mueblesConAvance = 0;
+        foreach ($data as $info) {
+            foreach ($info['proyectos'] as $proy) {
+                foreach ($proy['muebles'] as $mId => $m) {
+                    if (isset($mueblesVistos[$mId])) continue;
+                    $mueblesVistos[$mId] = true;
+                    $deltaCarp = (float) ($m['avance_carpinteria'] ?? 0) - (float) ($m['prev_carpinteria'] ?? 0);
+                    $deltaBarn = (float) ($m['avance_barniz'] ?? 0) - (float) ($m['prev_barniz'] ?? 0);
+                    $deltaTotal = max(0, $deltaCarp) + max(0, $deltaBarn);
+                    if ($deltaTotal > 0 && $m['costo_mueble'] > 0) {
+                        $totalProdAvanzada += $m['costo_mueble'] * $deltaTotal / 100;
+                        $mueblesConAvance++;
+                    }
+                }
+            }
+        }
+
+        return view('nomina.reporte-mensual', compact('data', 'mes', 'anio', 'nombreMes', 'departamentos', 'totalProdAvanzada', 'mueblesConAvance'));
+    }
+
+    public function buscarMueble(Request $request)
+    {
+        $query = trim($request->input('q', ''));
+        $fechaDesde = $request->input('fecha_desde');
+        $fechaHasta = $request->input('fecha_hasta');
+
+        if (!$query && !$fechaDesde && !$fechaHasta) {
+            return response()->json([]);
+        }
+
+        $registros = NominaDiaria::with(['personal', 'proyecto', 'mueble.proyecto'])
+            ->whereNotNull('mueble_id')
+            ->when($query, function ($q) use ($query) {
+                $q->whereHas('mueble', fn($m) => $m->where('numero', 'like', "%{$query}%")
+                    ->orWhere('descripcion', 'like', "%{$query}%"));
+            })
+            ->when($fechaDesde && $fechaDesde !== '', fn($q) => $q->where('fecha', '>=', $fechaDesde))
+            ->when($fechaHasta && $fechaHasta !== '', fn($q) => $q->where('fecha', '<=', $fechaHasta))
+            ->orderBy('fecha')
+            ->limit(1000)
+            ->get();
+
+        // Agrupar por mueble
+        $porMueble = [];
+        foreach ($registros as $r) {
+            $mId = $r->mueble_id;
+            if (!isset($porMueble[$mId])) {
+                $porMueble[$mId] = [
+                    'mueble_id' => $mId,
+                    'numero' => $r->mueble->numero,
+                    'descripcion' => $r->mueble->descripcion,
+                    'proyecto' => $r->mueble->proyecto->nombre ?? '',
+                    'abreviacion' => $r->mueble->proyecto->abreviacion ?? '',
+                    'jornales' => 0,
+                    'costo' => 0,
+                    'dias' => [],
+                ];
+            }
+            $porMueble[$mId]['jornales']++;
+            $porMueble[$mId]['costo'] += $r->costo_total;
+            $fecha = $r->fecha->format('Y-m-d');
+            $porMueble[$mId]['dias'][$fecha][] = [
+                'personal' => $r->personal->nombre ?? '',
+                'equipo' => $r->personal->equipo ?? '',
+                'costo' => round($r->costo_total, 2),
+            ];
+        }
+
+        return response()->json(array_values($porMueble));
     }
 }
