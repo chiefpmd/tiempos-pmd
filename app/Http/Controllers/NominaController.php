@@ -908,6 +908,52 @@ class NominaController extends Controller
         $mes = $request->integer('mes', now()->month);
         $anio = $request->integer('anio', now()->year);
 
+        $datos = $this->construirReporteMensual($mes, $anio);
+
+        return view('nomina.reporte-mensual', array_merge(['mes' => $mes, 'anio' => $anio], $datos));
+    }
+
+    public function exportarReporteMensual(Request $request)
+    {
+        $mes = $request->integer('mes', now()->month);
+        $anio = $request->integer('anio', now()->year);
+
+        $datos = $this->construirReporteMensual($mes, $anio);
+
+        $export = new \App\Exports\ReporteMensualExport(
+            $datos['data'],
+            $datos['departamentos'],
+            $datos['nombreMes'],
+            $datos['totalProdAvanzada'],
+            $datos['mueblesConAvance'],
+        );
+
+        $mesesEs = [1=>'enero',2=>'febrero',3=>'marzo',4=>'abril',5=>'mayo',6=>'junio',7=>'julio',8=>'agosto',9=>'septiembre',10=>'octubre',11=>'noviembre',12=>'diciembre'];
+        $nombreArchivo = "reporte_mensual_{$mesesEs[$mes]}_{$anio}.xlsx";
+
+        return \Maatwebsite\Excel\Facades\Excel::download($export, $nombreArchivo);
+    }
+
+    public function descargarHtmlReporteMensual(Request $request)
+    {
+        $mes = $request->integer('mes', now()->month);
+        $anio = $request->integer('anio', now()->year);
+
+        $datos = $this->construirReporteMensual($mes, $anio);
+
+        $html = view('nomina.reporte-mensual-descarga', $datos)->render();
+
+        $mesesEs = [1=>'enero',2=>'febrero',3=>'marzo',4=>'abril',5=>'mayo',6=>'junio',7=>'julio',8=>'agosto',9=>'septiembre',10=>'octubre',11=>'noviembre',12=>'diciembre'];
+        $nombreArchivo = "reporte_mensual_{$mesesEs[$mes]}_{$anio}.html";
+
+        return response($html, 200, [
+            'Content-Type' => 'text/html; charset=UTF-8',
+            'Content-Disposition' => "attachment; filename=\"{$nombreArchivo}\"",
+        ]);
+    }
+
+    private function construirReporteMensual(int $mes, int $anio): array
+    {
         $fechaInicio = Carbon::create($anio, $mes, 1)->startOfMonth();
         $fechaFin = $fechaInicio->copy()->endOfMonth();
         $mesesEs = [1=>'Enero',2=>'Febrero',3=>'Marzo',4=>'Abril',5=>'Mayo',6=>'Junio',7=>'Julio',8=>'Agosto',9=>'Septiembre',10=>'Octubre',11=>'Noviembre',12=>'Diciembre'];
@@ -1062,7 +1108,7 @@ class NominaController extends Controller
             }
         }
 
-        return view('nomina.reporte-mensual', compact('data', 'mes', 'anio', 'nombreMes', 'departamentos', 'totalProdAvanzada', 'mueblesConAvance'));
+        return compact('data', 'nombreMes', 'departamentos', 'totalProdAvanzada', 'mueblesConAvance');
     }
 
     public function buscarMueble(Request $request)

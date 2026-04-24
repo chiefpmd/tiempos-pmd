@@ -18,56 +18,116 @@
                class="border rounded px-2 py-1 text-sm w-20">
         <button type="submit" class="bg-gray-600 text-white px-3 py-1 rounded text-sm hover:bg-gray-700">Filtrar</button>
     </form>
+
+    <div class="flex items-center gap-2">
+        <a href="{{ route('nomina.reporteMensual.exportar', ['mes' => $mes, 'anio' => $anio]) }}"
+           class="bg-emerald-600 text-white px-3 py-1 rounded text-sm hover:bg-emerald-700 inline-flex items-center gap-1">
+            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v2a2 2 0 002 2h12a2 2 0 002-2v-2M7 10l5 5 5-5M12 15V3"/>
+            </svg>
+            Excel
+        </a>
+        <a href="{{ route('nomina.reporteMensual.html', ['mes' => $mes, 'anio' => $anio]) }}"
+           class="bg-indigo-600 text-white px-3 py-1 rounded text-sm hover:bg-indigo-700 inline-flex items-center gap-1">
+            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v2a2 2 0 002 2h12a2 2 0 002-2v-2M7 10l5 5 5-5M12 15V3"/>
+            </svg>
+            HTML
+        </a>
+    </div>
 </div>
 
 <p class="text-sm text-gray-500 mb-2">{{ $nombreMes }}</p>
 
-{{-- Tabla resumen --}}
+{{-- Tabla resumen por proyecto --}}
+@php
+    $proyectosResumen = [];
+    $sumCT = 0;
+    foreach($departamentos as $depto) {
+        $sumCT += $data[$depto]['totalCosto'];
+        foreach($data[$depto]['proyectos'] as $key => $proy) {
+            if (!isset($proyectosResumen[$key])) {
+                $proyectosResumen[$key] = [
+                    'nombre' => $proy['nombre'],
+                    'abreviacion' => $proy['abreviacion'],
+                    'proyecto_id' => $proy['proyecto_id'],
+                    'jornales' => 0,
+                    'costo' => 0,
+                    'personal' => [],
+                    'prod_avanzada' => 0,
+                ];
+            }
+            $proyectosResumen[$key]['jornales'] += $proy['jornales'];
+            $proyectosResumen[$key]['costo'] += $proy['costo'];
+            $proyectosResumen[$key]['personal'] += $proy['personal'];
+            $proyectosResumen[$key]['prod_avanzada'] += ($proy['prod_avanzada'] ?? 0);
+        }
+    }
+    $tJor = 0; $tCosto = 0; $tProd = 0;
+@endphp
 <div class="bg-white rounded-lg shadow overflow-x-auto mb-6">
     <table class="min-w-full text-sm">
         <thead class="bg-gray-50">
             <tr>
-                <th class="px-4 py-2 text-left font-medium text-gray-500">Departamento</th>
-                <th class="px-4 py-2 text-right font-medium text-gray-500">Jornales Proyecto</th>
-                <th class="px-4 py-2 text-right font-medium text-gray-500">Costo Proyecto</th>
-                <th class="px-4 py-2 text-right font-medium text-gray-500">Jornales Ausencias</th>
-                <th class="px-4 py-2 text-right font-medium text-gray-500">Costo Ausencias</th>
-                <th class="px-4 py-2 text-right font-medium text-gray-700">Total Jornales</th>
-                <th class="px-4 py-2 text-right font-medium text-gray-700">Total Costo</th>
+                <th class="px-4 py-2 text-left font-medium text-gray-500">Proyecto</th>
+                <th class="px-4 py-2 text-right font-medium text-gray-500">Jornales</th>
+                <th class="px-4 py-2 text-right font-medium text-gray-500">Costo Nómina</th>
+                <th class="px-4 py-2 text-right font-medium text-gray-500">Personas</th>
+                <th class="px-4 py-2 text-right font-medium text-gray-500">Prod. Avanzada</th>
+                <th class="px-4 py-2 text-right font-medium text-gray-500">Factor</th>
             </tr>
         </thead>
         <tbody class="divide-y divide-gray-100">
-            @php $sumJP = 0; $sumCP = 0; $sumJC = 0; $sumCC = 0; $sumJT = 0; $sumCT = 0; @endphp
-            @foreach($departamentos as $depto)
+            @forelse($proyectosResumen as $proy)
                 @php
-                    $info = $data[$depto];
-                    $sumJP += $info['jornalesProyecto'];
-                    $sumCP += $info['costoProyecto'];
-                    $sumJC += $info['jornalesCategoria'];
-                    $sumCC += $info['costoCategoria'];
-                    $sumJT += $info['totalJornales'];
-                    $sumCT += $info['totalCosto'];
+                    $tJor += $proy['jornales'];
+                    $tCosto += $proy['costo'];
+                    $tProd += $proy['prod_avanzada'];
+                    $factor = ($proy['prod_avanzada'] > 0 && $proy['costo'] > 0) ? $proy['costo'] / $proy['prod_avanzada'] : null;
                 @endphp
                 <tr class="hover:bg-gray-50">
-                    <td class="px-4 py-2 font-semibold {{ $depto === 'Carpintería' ? 'text-amber-600' : 'text-emerald-600' }}">{{ $depto }}</td>
-                    <td class="px-4 py-2 text-right font-mono">{{ $info['jornalesProyecto'] }}</td>
-                    <td class="px-4 py-2 text-right font-mono">${{ number_format($info['costoProyecto'], 2) }}</td>
-                    <td class="px-4 py-2 text-right font-mono">{{ $info['jornalesCategoria'] }}</td>
-                    <td class="px-4 py-2 text-right font-mono">${{ number_format($info['costoCategoria'], 2) }}</td>
-                    <td class="px-4 py-2 text-right font-mono font-semibold">{{ $info['totalJornales'] }}</td>
-                    <td class="px-4 py-2 text-right font-mono font-semibold">${{ number_format($info['totalCosto'], 2) }}</td>
+                    <td class="px-4 py-2">
+                        <a href="{{ route('nomina.costoMuebles', $proy['proyecto_id']) }}"
+                           class="font-semibold text-blue-600 hover:underline">{{ $proy['nombre'] }}</a>
+                        @if($proy['abreviacion'])
+                            <span class="text-xs text-gray-400 ml-1">({{ $proy['abreviacion'] }})</span>
+                        @endif
+                    </td>
+                    <td class="px-4 py-2 text-right font-mono">{{ $proy['jornales'] }}</td>
+                    <td class="px-4 py-2 text-right font-mono">${{ number_format($proy['costo'], 2) }}</td>
+                    <td class="px-4 py-2 text-right font-mono">{{ count($proy['personal']) }}</td>
+                    <td class="px-4 py-2 text-right font-mono {{ $proy['prod_avanzada'] > 0 ? 'text-blue-600 font-semibold' : 'text-gray-300' }}">
+                        {{ $proy['prod_avanzada'] > 0 ? '$' . number_format($proy['prod_avanzada'], 2) : '-' }}
+                    </td>
+                    <td class="px-4 py-2 text-right">
+                        @if($factor !== null)
+                            <span class="text-xs font-semibold px-1.5 py-0.5 rounded {{ $factor <= 0.25 ? 'bg-green-100 text-green-700' : ($factor <= 0.40 ? 'bg-yellow-100 text-yellow-700' : 'bg-red-100 text-red-700') }}">
+                                ×{{ number_format($factor, 2) }}
+                            </span>
+                        @else
+                            <span class="text-gray-300">-</span>
+                        @endif
+                    </td>
                 </tr>
-            @endforeach
+            @empty
+                <tr><td colspan="6" class="px-4 py-3 text-center text-gray-400 text-sm">Sin proyectos este mes.</td></tr>
+            @endforelse
         </tbody>
         <tfoot class="bg-gray-50">
+            @php $factorTotal = ($tProd > 0 && $tCosto > 0) ? $tCosto / $tProd : null; @endphp
             <tr class="font-semibold">
                 <td class="px-4 py-2 text-gray-700">Total</td>
-                <td class="px-4 py-2 text-right font-mono">{{ $sumJP }}</td>
-                <td class="px-4 py-2 text-right font-mono">${{ number_format($sumCP, 2) }}</td>
-                <td class="px-4 py-2 text-right font-mono">{{ $sumJC }}</td>
-                <td class="px-4 py-2 text-right font-mono">${{ number_format($sumCC, 2) }}</td>
-                <td class="px-4 py-2 text-right font-mono">{{ $sumJT }}</td>
-                <td class="px-4 py-2 text-right font-mono">${{ number_format($sumCT, 2) }}</td>
+                <td class="px-4 py-2 text-right font-mono">{{ $tJor }}</td>
+                <td class="px-4 py-2 text-right font-mono">${{ number_format($tCosto, 2) }}</td>
+                <td class="px-4 py-2 text-right font-mono"></td>
+                <td class="px-4 py-2 text-right font-mono text-blue-600">${{ number_format($tProd, 2) }}</td>
+                <td class="px-4 py-2 text-right">
+                    @if($factorTotal !== null)
+                        <span class="text-xs font-semibold px-1.5 py-0.5 rounded {{ $factorTotal <= 0.25 ? 'bg-green-100 text-green-700' : ($factorTotal <= 0.40 ? 'bg-yellow-100 text-yellow-700' : 'bg-red-100 text-red-700') }}">
+                            ×{{ number_format($factorTotal, 2) }}
+                        </span>
+                    @endif
+                </td>
             </tr>
         </tfoot>
     </table>
@@ -183,13 +243,20 @@
             @foreach($info['proyectos'] as $proy)
                 <div class="bg-white rounded-lg shadow mb-3 overflow-hidden">
                     <div class="px-4 py-2 bg-gray-50 border-b flex items-center justify-between">
-                        <div>
+                        <div class="flex items-center gap-2">
                             <a href="{{ route('nomina.costoMuebles', $proy['proyecto_id']) }}"
                                class="font-semibold text-sm text-blue-600 hover:underline">
                                 {{ $proy['nombre'] }}
                             </a>
                             @if($proy['abreviacion'])
-                                <span class="text-xs text-gray-400 ml-1">({{ $proy['abreviacion'] }})</span>
+                                <span class="text-xs text-gray-400">({{ $proy['abreviacion'] }})</span>
+                            @endif
+                            @if(($proy['prod_avanzada'] ?? 0) > 0 && $proy['costo'] > 0)
+                                @php $factor = $proy['costo'] / $proy['prod_avanzada']; @endphp
+                                <span class="text-xs font-semibold px-1.5 py-0.5 rounded {{ $factor <= 0.25 ? 'bg-green-100 text-green-700' : ($factor <= 0.40 ? 'bg-yellow-100 text-yellow-700' : 'bg-red-100 text-red-700') }}"
+                                      title="Factor: ${{ number_format($proy['costo'], 0) }} nómina / ${{ number_format($proy['prod_avanzada'], 0) }} prod">
+                                    ×{{ number_format($factor, 2) }}
+                                </span>
                             @endif
                         </div>
                         <div class="text-xs text-gray-500 flex items-center gap-3">
