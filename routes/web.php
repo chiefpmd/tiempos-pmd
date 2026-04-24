@@ -70,6 +70,7 @@ Route::middleware('auth')->group(function () {
 
         // Nómina - guardar (admin only)
         Route::post('/nomina/guardar', [NominaController::class, 'guardar'])->name('nomina.guardar');
+        Route::get('/nomina/movil', [NominaController::class, 'movil'])->name('nomina.movil');
         Route::post('/nomina/aplicar-festivos', [NominaController::class, 'aplicarFestivos'])->name('nomina.aplicarFestivos');
         Route::post('/nomina/costo-mueble/{mueble}', [NominaController::class, 'guardarCostoMueble'])->name('nomina.guardarCostoMueble');
 

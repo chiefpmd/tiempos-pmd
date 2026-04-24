@@ -82,6 +82,42 @@ class NominaController extends Controller
         ));
     }
 
+    public function movil(Request $request)
+    {
+        $fecha = $request->filled('fecha')
+            ? Carbon::parse($request->fecha)
+            : Carbon::today();
+
+        $empleados = Personal::where('activo', true)
+            ->orderBy('equipo')
+            ->orderBy('nombre')
+            ->get();
+
+        $registros = NominaDiaria::whereDate('fecha', $fecha->format('Y-m-d'))
+            ->get()
+            ->keyBy('personal_id');
+
+        $proyectos = Proyecto::where('status', 'activo')->orderBy('nombre')->get();
+        $categorias = CategoriaNomina::where('activa', true)->orderBy('nombre')->get();
+
+        // Incluir proyectos no activos que ya tengan registros en la fecha
+        $proyectoIdsUsados = $registros->pluck('proyecto_id')->filter()->unique()
+            ->diff($proyectos->pluck('id'));
+        if ($proyectoIdsUsados->isNotEmpty()) {
+            $proyectosExtra = Proyecto::whereIn('id', $proyectoIdsUsados)->orderBy('nombre')->get();
+            $proyectos = $proyectos->merge($proyectosExtra)->sortBy('nombre')->values();
+        }
+
+        $mueblesPorProyecto = Mueble::whereIn('proyecto_id', $proyectos->pluck('id'))
+            ->orderBy('numero')
+            ->get()
+            ->groupBy('proyecto_id');
+
+        return view('nomina.movil', compact(
+            'fecha', 'empleados', 'registros', 'proyectos', 'categorias', 'mueblesPorProyecto'
+        ));
+    }
+
     public function guardar(Request $request)
     {
         $request->validate([
