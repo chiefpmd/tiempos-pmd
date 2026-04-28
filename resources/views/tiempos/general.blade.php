@@ -25,8 +25,8 @@
     .gantt-sticky-head tr:nth-child(2) th { top: 25px; }
 
     /* Sticky descripcion column */
-    .sticky-desc { position: sticky; left: 80px; z-index: 5; background: #fff; }
-    .sticky-desc-header { position: sticky; left: 80px; z-index: 21; }
+    .sticky-desc { position: sticky; left: 56px; z-index: 5; background: #fff; }
+    .sticky-desc-header { position: sticky; left: 56px; z-index: 21; }
     .add-mueble-form { display: none; }
     .add-mueble-form.active { display: flex; }
     .festivo { background-color: #f3e8ff; }
@@ -79,37 +79,11 @@
     .gantt-handle-left { left: 0; border-radius: 3px 0 0 3px; }
     .gantt-handle-right { right: 0; border-radius: 0 3px 3px 0; }
 
-    /* Edit personas popup */
-    #edit-personas-popup {
-        display: none; position: fixed; z-index: 100; background: #fff; border: 2px solid #6b7280;
-        border-radius: 6px; padding: 8px; box-shadow: 0 4px 12px rgba(0,0,0,0.3); font-size: 12px;
-    }
-    #edit-personas-popup.active { display: flex; align-items: center; gap: 6px; }
-    #edit-personas-popup input {
-        width: 50px; text-align: center; border: 1px solid #d1d5db; border-radius: 4px; padding: 2px 4px; font-size: 12px;
-    }
-    #edit-personas-popup button {
-        background: #3b82f6; color: #fff; border: none; border-radius: 4px; padding: 3px 10px; cursor: pointer; font-size: 11px;
-    }
-    #edit-personas-popup button:hover { background: #2563eb; }
-    #edit-personas-popup .cancel-btn { background: #9ca3af; }
-
     /* Process color legend dots */
     .proc-dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; margin-right: 2px; }
     .proc-dot-carp { background-color: #f59e0b; }
     .proc-dot-barn { background-color: #10b981; }
     .proc-dot-inst { background-color: #3b82f6; }
-
-    /* Assignment popover */
-    .assign-popover {
-        display: none; position: absolute; z-index: 50;
-        background: white; border: 1px solid #d1d5db; border-radius: 8px;
-        box-shadow: 0 4px 12px rgba(0,0,0,0.15); padding: 8px; min-width: 220px;
-    }
-    .assign-popover.active { display: block; }
-    .assign-row { display: flex; align-items: center; gap: 4px; margin-bottom: 4px; }
-    .assign-row label { font-size: 10px; font-weight: 600; min-width: 70px; }
-    .assign-row select { font-size: 11px; flex: 1; }
 
     /* Fecha entrega mueble */
     .fecha-entrega-cell { background-color: rgba(249,115,22,0.25) !important; }
@@ -137,19 +111,34 @@
 </style>
 @endpush
 
+@php
+    $weeksOptions = [];
+    if (isset($ventanaInicio) && $ventanaInicio) {
+        $cursor = $ventanaInicio->copy()->startOfWeek();
+        for ($i = 0; $i < 4; $i++) {
+            $weeksOptions[] = [
+                'start' => $cursor->format('Y-m-d'),
+                'label' => $cursor->locale('es')->isoFormat('D MMM'),
+            ];
+            $cursor->addWeek();
+        }
+    }
+    $semanaActualStart = \Carbon\Carbon::now()->startOfWeek()->format('Y-m-d');
+    $defaultWeek = collect($weeksOptions)->firstWhere('start', $semanaActualStart)['start'] ?? ($weeksOptions[0]['start'] ?? $semanaActualStart);
+    $isAdminUser = auth()->user()->isAdmin();
+@endphp
+
 @section('content')
-<div class="max-w-full mx-auto">
+<div class="max-w-full mx-auto" x-data='proyeccionApp(@json($weeksOptions), "{{ $defaultWeek }}", {{ $isAdminUser ? 'true' : 'false' }})' x-init="init()">
     <div class="flex justify-between items-center mb-3">
-        <h1 class="text-xl font-bold">Proyección - Todos los Proyectos</h1>
+        <h1 class="text-xl font-bold">Proyección</h1>
         <div class="flex items-center gap-2">
             @if($ventanaInicio ?? false)
             <div class="flex items-center gap-1 text-sm">
-                @if($canGoBack)
-                    <a href="{{ route('general', ['desde' => $allDesde]) }}" class="px-2 py-1 bg-gray-200 rounded hover:bg-gray-300" title="Ver todo">&laquo;</a>
-                    <a href="{{ route('general', ['desde' => $prevDesde]) }}" class="px-2 py-1 bg-gray-200 rounded hover:bg-gray-300" title="2 semanas atras">&lsaquo;</a>
-                @endif
+                <a href="{{ route('general', ['desde' => $prevDesde]) }}" class="px-2 py-1 bg-gray-200 rounded hover:bg-gray-300" title="Semana anterior">&lsaquo;</a>
                 <a href="{{ route('general') }}" class="px-2 py-1 bg-blue-100 text-blue-700 rounded hover:bg-blue-200 text-xs font-medium">Hoy</a>
-                <a href="{{ route('general', ['desde' => $nextDesde]) }}" class="px-2 py-1 bg-gray-200 rounded hover:bg-gray-300" title="2 semanas adelante">&rsaquo;</a>
+                <a href="{{ route('general', ['desde' => $nextDesde]) }}" class="px-2 py-1 bg-gray-200 rounded hover:bg-gray-300" title="Semana siguiente">&rsaquo;</a>
+                <span class="ml-2 text-xs text-gray-500">{{ $ventanaInicio->format('d M') }} – {{ $ventanaFin->format('d M Y') }}</span>
             </div>
             @endif
             <a href="{{ route('export.general.html', request()->query()) }}" class="bg-gray-600 text-white px-3 py-1.5 rounded text-sm hover:bg-gray-700">Descargar HTML</a>
@@ -162,12 +151,26 @@
         <span class="flex items-center"><span class="proc-dot proc-dot-barn"></span> Barniz</span>
         <span class="flex items-center"><span class="proc-dot proc-dot-inst"></span> Instalacion</span>
         <span class="flex items-center ml-2"><span style="display:inline-block;width:12px;height:8px;background:rgba(249,115,22,0.35);border-right:3px solid #f97316;margin-right:3px;"></span> Fecha entrega</span>
-        <span class="text-gray-400 ml-4">Arrastra para mover | Bordes para redimensionar | Click derecho para asignar equipo | Doble click en celda para fecha entrega</span>
+        <span class="text-gray-400 ml-4">Arrastra para mover | Bordes para redimensionar | Doble click en celda para fecha entrega</span>
     </div>
 
     @if($proyectos->isEmpty())
         <div class="bg-white rounded-lg shadow p-8 text-center text-gray-500">No hay proyectos activos.</div>
     @else
+        <div class="mb-4 flex items-center gap-2">
+            <label for="proyecto-selector" class="text-sm font-medium text-gray-700">Proyecto:</label>
+            <select id="proyecto-selector" x-model="selected" class="border rounded px-3 py-1.5 text-sm bg-white">
+                <option value="">— Selecciona un proyecto —</option>
+                @foreach($proyectos as $proyecto)
+                    <option value="{{ $proyecto->id }}">{{ $proyecto->nombre }}</option>
+                @endforeach
+            </select>
+        </div>
+
+        <div x-show="selected === ''" class="bg-white rounded-lg shadow p-8 text-center text-gray-500">
+            Selecciona un proyecto del menú para verlo.
+        </div>
+
         @php
             $allTiempos = \App\Models\Tiempo::whereIn('mueble_id', $proyectos->flatMap(fn($p) => $p->muebles->pluck('id')))->get();
             $personalByEquipo = [
@@ -184,8 +187,10 @@
             $procesoSlots = ['Carpintería' => 0, 'Barniz' => 1, 'Instalación' => 2];
         @endphp
 
+        <div class="flex gap-3" x-show="selected !== ''" x-cloak>
+        <div class="flex-1 min-w-0">
         @foreach($proyectos as $proyecto)
-        <div class="mb-6">
+        <div class="mb-6" x-show="selected === '{{ $proyecto->id }}'" x-cloak>
             <div class="flex items-center space-x-3 mb-1">
                 <h2 class="text-sm font-bold">{{ $proyecto->nombre }}</h2>
                 <span class="text-xs text-gray-500">({{ $proyecto->muebles->count() }} muebles)</span>
@@ -282,8 +287,8 @@
                     @endphp
                     <thead class="bg-gray-50 gantt-sticky-head">
                         <tr>
-                            <th class="px-2 py-1 sticky left-0 bg-gray-50 z-20" style="min-width:80px"></th>
-                            <th class="px-2 py-1 sticky-desc-header bg-gray-50" style="min-width:160px"></th>
+                            <th class="px-1 py-1 sticky left-0 bg-gray-50 z-20" style="min-width:56px"></th>
+                            <th class="px-2 py-1 sticky-desc-header bg-gray-50" style="min-width:120px"></th>
                             @foreach($semanas as $numSemana => $diasSemana)
                                 <th class="text-center font-bold text-blue-600 {{ $numSemana == $semanaActual ? 'current-week-header' : 'bg-blue-50' }} week-start text-xs" colspan="{{ count($diasSemana) }}">
                                     Sem {{ $numSemana }}
@@ -292,8 +297,8 @@
                             <th class="bg-gray-50"></th>
                         </tr>
                         <tr>
-                            <th class="px-2 py-1 text-left font-medium text-gray-500 sticky left-0 bg-gray-50 z-20" style="min-width:80px">Mueble</th>
-                            <th class="px-2 py-1 text-left font-medium text-gray-500 sticky-desc-header bg-gray-50" style="min-width:160px">Descripcion</th>
+                            <th class="px-1 py-1 text-left font-medium text-gray-500 sticky left-0 bg-gray-50 z-20" style="min-width:56px">#</th>
+                            <th class="px-2 py-1 text-left font-medium text-gray-500 sticky-desc-header bg-gray-50" style="min-width:120px">Descripción</th>
                             @foreach($diasHabiles as $dia)
                                 @php
                                     $esFestivo = isset($festivos[$dia->format('Y-m-d')]);
@@ -318,25 +323,38 @@
                     <tbody>
                         @foreach($proyecto->muebles as $mi => $mueble)
                             @php
-                                // Gather data for all 3 processes in this mueble
+                                // Build bars grouped by (proceso, persona, semana ISO)
                                 $muebleProcs = [];
+                                $gridDates = collect($diasHabiles)->map(fn($d) => $d->format('Y-m-d'))->values();
                                 foreach ($procesos as $proceso) {
-                                    $tiemposProceso = $allTiempos->where('mueble_id', $mueble->id)->where('proceso', $proceso);
-                                    $asignado = $tiemposProceso->pluck('personal_id')->unique()->first();
-                                    $persona = $asignado ? ($personal[$asignado] ?? null) : null;
-                                    $personas = $tiemposProceso->where('horas', '>', 0)->first()?->horas ?? 0;
-                                    $fechas = $tiemposProceso->where('horas', '>', 0)->pluck('fecha')->map(fn($f) => $f->format('Y-m-d'));
-                                    $gridDates = collect($diasHabiles)->map(fn($d) => $d->format('Y-m-d'));
-                                    $fechasVisibles = $fechas->intersect($gridDates);
-                                    $fechaMin = $fechasVisibles->min();
-                                    $fechaMax = $fechasVisibles->max();
-                                    $diasCount = $fechasVisibles->count();
+                                    $tiemposProceso = $allTiempos
+                                        ->where('mueble_id', $mueble->id)
+                                        ->where('proceso', $proceso)
+                                        ->where('horas', '>', 0);
+
+                                    $bloques = [];
+                                    $diasCount = 0;
+                                    $byPersonaSemana = $tiemposProceso->groupBy(fn($t) => $t->personal_id . '|' . $t->fecha->copy()->startOfWeek()->format('Y-m-d'));
+                                    foreach ($byPersonaSemana as $key => $grupo) {
+                                        [$pid, $semanaInicio] = explode('|', $key);
+                                        $pid = (int) $pid;
+                                        $persona = $personal[$pid] ?? null;
+                                        $fechas = $grupo->pluck('fecha')->map(fn($f) => $f->format('Y-m-d'));
+                                        $fechasVisibles = $fechas->intersect($gridDates)->sort()->values();
+                                        if ($fechasVisibles->isEmpty()) continue;
+                                        $bloques[] = [
+                                            'personal_id' => $pid,
+                                            'nombre' => $persona?->nombre ?? '?',
+                                            'color_hex' => $persona?->color_hex ?? '#9ca3af',
+                                            'fecha_min' => $fechasVisibles->first(),
+                                            'fecha_max' => $fechasVisibles->last(),
+                                            'dias' => $fechasVisibles->count(),
+                                            'semana_inicio' => $semanaInicio,
+                                        ];
+                                        $diasCount += $fechasVisibles->count();
+                                    }
                                     $muebleProcs[$proceso] = [
-                                        'asignado' => $asignado,
-                                        'persona' => $persona ? ['nombre' => $persona->nombre, 'color_hex' => $persona->color_hex] : null,
-                                        'personas' => $personas,
-                                        'fecha_min' => $fechaMin,
-                                        'fecha_max' => $fechaMax,
+                                        'bloques' => $bloques,
                                         'dias' => $diasCount,
                                     ];
                                 }
@@ -348,7 +366,7 @@
                                 data-procs='@json($muebleProcs)'
                                 data-fecha-entrega="{{ $mueble->fecha_entrega?->format('Y-m-d') ?? '' }}"
                             >
-                                <td class="px-2 py-1 font-medium sticky left-0 bg-white z-10 align-top">
+                                <td class="px-1 py-1 font-medium sticky left-0 bg-white z-10 align-top text-xs">
                                     {{ $mueble->numero }}
                                     @if($isAdmin)
                                         <form method="POST" action="{{ route('muebles.destroy', $mueble) }}" class="inline" onsubmit="return confirm('Eliminar mueble {{ $mueble->numero }}?')">
@@ -357,17 +375,8 @@
                                         </form>
                                     @endif
                                 </td>
-                                <td class="px-2 py-1 align-top sticky-desc" style="min-width:160px">
+                                <td class="px-2 py-1 align-top sticky-desc" style="min-width:120px">
                                     <div class="text-xs">{{ $mueble->descripcion }}</div>
-                                    <div class="flex gap-1 mt-0.5">
-                                        @foreach($procesos as $proceso)
-                                            @php $mp = $muebleProcs[$proceso]; @endphp
-                                            <span class="inline-flex items-center text-[9px] text-gray-500" title="{{ $proceso }}: {{ $mp['persona']['nombre'] ?? 'Sin asignar' }}">
-                                                <span class="proc-dot proc-dot-{{ match($proceso) { 'Carpintería' => 'carp', 'Barniz' => 'barn', 'Instalación' => 'inst' } }}"></span>
-                                                {{ $mp['persona'] ? Str::limit($mp['persona']['nombre'], 8) : '-' }}
-                                            </span>
-                                        @endforeach
-                                    </div>
                                 </td>
                                 @foreach($diasHabiles as $dia)
                                     @php
@@ -399,42 +408,72 @@
             </div>
         </div>
         @endforeach
+        </div>{{-- /flex-1 --}}
+
+        {{-- Panel lateral inline: personal disponible por semana --}}
+        <aside class="w-60 flex-shrink-0">
+            <div class="sticky top-2 bg-white shadow rounded-lg p-2.5 max-h-[calc(100vh-80px)] overflow-y-auto border border-gray-200">
+        <div class="flex items-center justify-between mb-2">
+            <span class="text-xs font-bold text-gray-700 uppercase">Personal</span>
+            <button @click="loadPersonal()" class="text-xs text-blue-600 hover:underline" title="Recargar">↻</button>
+        </div>
+
+        <div class="flex gap-1 mb-3">
+            <template x-for="w in weeks" :key="w.start">
+                <button @click="weekStart = w.start"
+                        :class="weekStart === w.start ? 'bg-blue-600 text-white' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'"
+                        class="text-xs px-2 py-1 rounded flex-1"
+                        x-text="w.label"></button>
+            </template>
+        </div>
+
+        <div class="text-sm font-medium mb-2 flex items-center justify-between">
+            <span>Sin asignar</span>
+            <span class="text-blue-600 font-mono">
+                <span x-text="diasLibresTotales()"></span>d
+                <span class="text-gray-400 text-xs">(<span x-text="sinAsignar()"></span>p)</span>
+            </span>
+        </div>
+
+        <template x-if="picked">
+            <div class="mb-2 p-2 bg-blue-50 border border-blue-300 rounded text-xs">
+                Modo: asignar <strong x-text="picked.nombre"></strong>
+                (<span x-text="picked.dias_libres"></span>d)
+                <button @click="picked = null" class="float-right text-gray-500 hover:text-red-600 font-bold">✕</button>
+                <div class="text-gray-600 mt-1">Click en una barra del Gantt</div>
+            </div>
+        </template>
+
+        <template x-if="loading">
+            <div class="text-center text-gray-400 text-xs py-4">Cargando…</div>
+        </template>
+
+        <template x-if="!loading && diasLibresTotales() === 0">
+            <div class="text-center text-green-600 text-sm font-medium py-3">✓ Semana 100% asignada</div>
+        </template>
+
+        <template x-for="(lista, equipo) in porEquipo()" :key="equipo">
+            <div class="mb-2">
+                <div class="text-xs font-semibold text-gray-500 uppercase mb-1" x-text="equipo"></div>
+                <template x-for="p in lista" :key="p.id">
+                    <div @click="pick(p.id)"
+                         :class="picked && picked.id === p.id ? 'ring-2 ring-blue-500 bg-blue-50' : 'bg-gray-50 hover:bg-gray-100'"
+                         class="cursor-pointer flex items-center justify-between px-2 py-1 rounded mb-1 text-sm">
+                        <span class="flex items-center gap-1.5 min-w-0">
+                            <span class="w-2.5 h-2.5 rounded-full flex-shrink-0" :style="'background:' + p.color_hex"></span>
+                            <span class="truncate" x-text="p.nombre"></span>
+                        </span>
+                        <span class="text-xs font-mono bg-white px-1.5 py-0.5 rounded border flex-shrink-0" x-text="p.dias_libres + 'd'"></span>
+                    </div>
+                </template>
+            </div>
+        </template>
+            </div>{{-- /sticky --}}
+        </aside>
+        </div>{{-- /flex --}}
     @endif
 </div>
 
-{{-- Assignment popover (shared, moved by JS) --}}
-<div class="assign-popover" id="assign-popover">
-    <div class="text-xs font-bold mb-2 text-gray-700" id="assign-title">Asignar equipo</div>
-    @foreach(['Carpintería', 'Barniz', 'Instalación'] as $proc)
-    <div class="assign-row" data-proceso="{{ $proc }}">
-        <label><span class="proc-dot proc-dot-{{ match($proc) { 'Carpintería' => 'carp', 'Barniz' => 'barn', 'Instalación' => 'inst' } }}"></span>{{ $proc }}</label>
-        <select class="assign-select border rounded px-1 py-0.5" data-proceso="{{ $proc }}">
-            <option value="">--</option>
-            @foreach($personalByEquipo[$proc] ?? [] as $p)
-                <option value="{{ $p->id }}" style="color: {{ $p->color_hex }}">{{ $p->nombre }}</option>
-            @endforeach
-        </select>
-    </div>
-    <div class="assign-dates hidden ml-2 mb-1" data-proceso="{{ $proc }}">
-        <div class="flex items-center gap-1 text-[10px] text-gray-500">
-            <input type="date" class="assign-fecha-inicio border rounded px-1 py-0.5 text-[10px]" data-proceso="{{ $proc }}">
-            <span>a</span>
-            <input type="date" class="assign-fecha-fin border rounded px-1 py-0.5 text-[10px]" data-proceso="{{ $proc }}">
-            <input type="number" class="assign-personas border rounded px-1 py-0.5 text-[10px] w-10 text-center" data-proceso="{{ $proc }}" value="1" min="0.5" max="24" step="0.5" title="Personas">
-            <button type="button" class="bg-blue-600 text-white px-2 py-0.5 rounded text-[10px] assign-save-btn" data-proceso="{{ $proc }}">Crear</button>
-        </div>
-    </div>
-    @endforeach
-    <div class="flex justify-end gap-2 mt-2">
-        <button type="button" class="text-xs text-gray-400 hover:text-gray-600" id="assign-cancel">Cerrar</button>
-    </div>
-</div>
-<div id="edit-personas-popup">
-    <span style="font-weight:600; color:#374151;">Personas:</span>
-    <input type="number" id="edit-personas-input" min="0.5" max="24" step="0.5" value="1">
-    <button id="edit-personas-save">OK</button>
-    <button class="cancel-btn" id="edit-personas-cancel">X</button>
-</div>
 <div id="fecha-entrega-popup">
     <span style="font-weight:600; color:#f97316;">Entrega:</span>
     <input type="date" id="fecha-entrega-input">
@@ -446,6 +485,93 @@
 
 @push('scripts')
 <script>
+window.proyeccionApp = function(weeks, defaultWeek, isAdmin) {
+    return {
+        selected: sessionStorage.getItem('tiempos.proyectoSelected') || '',
+        weeks: weeks,
+        weekStart: defaultWeek,
+        picked: null,
+        personal: [],
+        diasLab: 5,
+        loading: false,
+        isAdmin: isAdmin,
+
+        init() {
+            this.$watch('selected', v => sessionStorage.setItem('tiempos.proyectoSelected', v));
+            this.$watch('weekStart', () => this.loadPersonal());
+            window.__proyeccionState = this;
+            this.loadPersonal();
+        },
+
+        loadPersonal() {
+            this.loading = true;
+            fetch('/asignacion/disponibilidad?semana=' + this.weekStart, {
+                headers: { 'Accept': 'application/json' }
+            })
+            .then(r => r.json())
+            .then(data => {
+                this.personal = data.personal || [];
+                this.diasLab = data.dias_laborables || 5;
+                this.loading = false;
+            })
+            .catch(() => { this.loading = false; });
+        },
+
+        pick(id) {
+            if (!this.isAdmin) {
+                alert('Solo administradores pueden asignar personal');
+                return;
+            }
+            const p = this.personal.find(x => x.id === id);
+            if (!p || p.dias_libres === 0) return;
+            this.picked = (this.picked && this.picked.id === id) ? null : p;
+        },
+
+        assignToBar(muebleId, proceso) {
+            if (!this.picked) return false;
+            const personalId = this.picked.id;
+            const csrfToken = document.querySelector('meta[name="csrf-token"]').content;
+            fetch('/asignacion/asignar', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json', 'X-CSRF-TOKEN': csrfToken, 'Accept': 'application/json' },
+                body: JSON.stringify({
+                    mueble_id: parseInt(muebleId),
+                    proceso: proceso,
+                    personal_id: personalId,
+                    semana: this.weekStart,
+                })
+            })
+            .then(r => r.json().then(d => ({ ok: r.ok, data: d })))
+            .then(({ ok, data }) => {
+                if (ok && data.ok) {
+                    location.reload();
+                } else {
+                    alert(data.error || 'Error al asignar');
+                }
+            })
+            .catch(() => alert('Error al asignar'));
+            return true;
+        },
+
+        sinAsignar() {
+            return this.personal.filter(p => p.dias_libres > 0).length;
+        },
+
+        diasLibresTotales() {
+            return this.personal.reduce((acc, p) => acc + (p.dias_libres || 0), 0);
+        },
+
+        porEquipo() {
+            const groups = {};
+            this.personal.filter(p => p.dias_libres > 0).forEach(p => {
+                if (!groups[p.equipo]) groups[p.equipo] = [];
+                groups[p.equipo].push(p);
+            });
+            return groups;
+        },
+    };
+};
+
 document.addEventListener('DOMContentLoaded', function() {
     const csrfToken = document.querySelector('meta[name="csrf-token"]').content;
     const procesoColors = { 'Carpintería': '#f59e0b', 'Barniz': '#10b981', 'Instalación': '#3b82f6' };
@@ -598,48 +724,49 @@ document.addEventListener('DOMContentLoaded', function() {
         const colPos = getColPositions(table);
 
         for (const [proceso, data] of Object.entries(procs)) {
-            if (!data.fecha_min || !data.fecha_max) continue;
+            const bloques = data.bloques || [];
+            for (const bloque of bloques) {
+                const firstCol = colPos.find(c => c.date === bloque.fecha_min);
+                const lastCol = colPos.find(c => c.date === bloque.fecha_max);
+                if (!firstCol || !lastCol) continue;
 
-            const firstCol = colPos.find(c => c.date === data.fecha_min);
-            const lastCol = colPos.find(c => c.date === data.fecha_max);
-            if (!firstCol || !lastCol) continue;
+                const barLeft = firstCol.left;
+                const barWidth = (lastCol.left + lastCol.width) - firstCol.left;
+                const slot = procesoSlots[proceso];
+                const color = bloque.color_hex || procesoColors[proceso];
 
-            const barLeft = firstCol.left;
-            const barWidth = (lastCol.left + lastCol.width) - firstCol.left;
-            const slot = procesoSlots[proceso];
-            const color = data.persona?.color_hex || procesoColors[proceso];
+                const bar = document.createElement('div');
+                bar.className = 'gantt-bar';
+                bar.setAttribute('data-slot', slot);
+                bar.style.left = barLeft + 'px';
+                bar.style.width = barWidth + 'px';
+                bar.style.backgroundColor = color + 'CC';
+                bar.style.borderColor = color;
+                bar.dataset.firstDate = bloque.fecha_min;
+                bar.dataset.lastDate = bloque.fecha_max;
+                bar.dataset.muebleId = row.dataset.muebleId;
+                bar.dataset.proceso = proceso;
+                bar.dataset.personalId = bloque.personal_id;
+                bar.dataset.proyectoId = row.dataset.proyectoId;
+                bar.dataset.color = color;
+                bar.dataset.semanaInicio = bloque.semana_inicio;
+                bar.dataset.nombre = bloque.nombre;
 
-            const bar = document.createElement('div');
-            bar.className = 'gantt-bar';
-            bar.setAttribute('data-slot', slot);
-            bar.style.left = barLeft + 'px';
-            bar.style.width = barWidth + 'px';
-            bar.style.backgroundColor = color + 'AA';
-            bar.style.borderColor = color;
-            bar.dataset.firstDate = data.fecha_min;
-            bar.dataset.lastDate = data.fecha_max;
-            bar.dataset.muebleId = row.dataset.muebleId;
-            bar.dataset.proceso = proceso;
-            bar.dataset.personalId = data.asignado || '';
-            bar.dataset.proyectoId = row.dataset.proyectoId;
-            bar.dataset.color = color;
-            bar.dataset.personas = data.personas || 1;
+                // Label: name initials + days
+                const initials = (bloque.nombre || '?').split(/\s+/).slice(0, 2).map(s => s[0] || '').join('');
+                bar.textContent = initials + ' ' + bloque.dias + 'd';
+                bar.title = bloque.nombre + ' — ' + bloque.dias + 'd (' + proceso + ')';
 
-            // Label: process abbreviation + personas count
-            const procesoLabels = { 'Carpintería': 'Carp.', 'Barniz': 'Barniz', 'Instalación': 'Inst.' };
-            const label = procesoLabels[proceso] || proceso.charAt(0);
-            const pVal = data.personas % 1 === 0 ? Math.round(data.personas) : data.personas;
-            bar.textContent = label + (data.personas > 0 ? ' ' + pVal : '');
+                const handleLeft = document.createElement('div');
+                handleLeft.className = 'gantt-handle gantt-handle-left';
+                bar.appendChild(handleLeft);
 
-            const handleLeft = document.createElement('div');
-            handleLeft.className = 'gantt-handle gantt-handle-left';
-            bar.appendChild(handleLeft);
+                const handleRight = document.createElement('div');
+                handleRight.className = 'gantt-handle gantt-handle-right';
+                bar.appendChild(handleRight);
 
-            const handleRight = document.createElement('div');
-            handleRight.className = 'gantt-handle gantt-handle-right';
-            bar.appendChild(handleRight);
-
-            row.appendChild(bar);
+                row.appendChild(bar);
+            }
         }
     }
 
@@ -653,11 +780,6 @@ document.addEventListener('DOMContentLoaded', function() {
         clearTimeout(resizeTimer);
         resizeTimer = setTimeout(buildAllGanttBars, 200);
     });
-
-    // ===== EDIT PERSONAS (click on bar without dragging) =====
-    const editPopup = document.getElementById('edit-personas-popup');
-    const editInput = document.getElementById('edit-personas-input');
-    let editingBar = null;
 
     // ===== DRAG & RESIZE LOGIC =====
 
@@ -683,6 +805,14 @@ document.addEventListener('DOMContentLoaded', function() {
         const handle = e.target.closest('.gantt-handle');
         const bar = e.target.closest('.gantt-bar');
         if (!bar) return;
+
+        // If a personal card is "picked", clicking a bar assigns the person.
+        const app = window.__proyeccionState;
+        if (app && app.picked && !handle) {
+            e.preventDefault();
+            app.assignToBar(bar.dataset.muebleId, bar.dataset.proceso);
+            return;
+        }
 
         e.preventDefault();
         const table = bar.closest('table');
@@ -721,17 +851,28 @@ document.addEventListener('DOMContentLoaded', function() {
             document.removeEventListener('mouseup', onMouseUp);
             bar.classList.remove('dragging');
 
-            // If not dragged, show edit personas popup
+            // Click without drag: liberate this person from this week
             if (!dragged && !handle) {
                 bar.style.left = origLeft + 'px';
                 bar.style.width = origWidth + 'px';
-                editingBar = bar;
-                editInput.value = parseFloat(bar.dataset.personas) || 1;
-                editPopup.style.left = ev.clientX + 'px';
-                editPopup.style.top = (ev.clientY - 40) + 'px';
-                editPopup.classList.add('active');
-                editInput.focus();
-                editInput.select();
+                const nombre = bar.dataset.nombre || 'esta persona';
+                if (!confirm('¿Liberar a ' + nombre + ' de esta semana?')) return;
+                fetch('/asignacion/quitar', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json', 'X-CSRF-TOKEN': csrfToken, 'Accept': 'application/json' },
+                    body: JSON.stringify({
+                        mueble_id: parseInt(bar.dataset.muebleId),
+                        proceso: bar.dataset.proceso,
+                        personal_id: parseInt(bar.dataset.personalId),
+                        semana: bar.dataset.semanaInicio,
+                    })
+                })
+                .then(r => r.json())
+                .then(d => {
+                    if (d.ok) location.reload();
+                    else alert(d.error || 'Error al liberar');
+                })
+                .catch(() => alert('Error al liberar'));
                 return;
             }
 
@@ -747,24 +888,36 @@ document.addEventListener('DOMContentLoaded', function() {
 
                 if (daysMoved === 0) { bar.style.left = origLeft + 'px'; return; }
 
-                const proyectoId = bar.dataset.proyectoId;
-                bar.style.opacity = '0.5';
+                // Move only this person's bar: shift their dates by daysMoved
+                const newFirstIdx = allDates.indexOf(origFirstDate) + daysMoved;
+                const newLastIdx = allDates.indexOf(origLastDate) + daysMoved;
+                if (newFirstIdx < 0 || newLastIdx >= allDates.length) {
+                    alert('Fuera de la ventana visible');
+                    bar.style.left = origLeft + 'px';
+                    return;
+                }
+                const newFirstDate = allDates[newFirstIdx];
+                const newLastDate = allDates[newLastIdx];
 
-                fetch('/tiempos/recorrer/' + proyectoId, {
+                bar.style.opacity = '0.5';
+                fetch('{{ route("tiempos.guardarRango") }}', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json', 'X-CSRF-TOKEN': csrfToken, 'Accept': 'application/json' },
                     body: JSON.stringify({
-                        dias_habiles: daysMoved,
-                        procesos: [bar.dataset.proceso],
-                        mueble_ids: [parseInt(bar.dataset.muebleId)]
+                        mueble_id: parseInt(bar.dataset.muebleId),
+                        proceso: bar.dataset.proceso,
+                        personal_id: parseInt(bar.dataset.personalId),
+                        fecha_inicio: newFirstDate,
+                        fecha_fin: newLastDate,
+                        personas: 1
                     })
                 })
                 .then(r => r.json())
                 .then(data => {
-                    if (data.ok) { location.reload(); }
+                    if (data.ok || data.success) { location.reload(); }
                     else { alert('Error: ' + (data.error || 'Unknown error')); bar.style.left = origLeft + 'px'; bar.style.opacity = '1'; }
                 })
-                .catch(() => { alert('Error al recorrer fechas'); bar.style.left = origLeft + 'px'; bar.style.opacity = '1'; });
+                .catch(() => { alert('Error al mover'); bar.style.left = origLeft + 'px'; bar.style.opacity = '1'; });
 
             } else {
                 // Resize
@@ -808,199 +961,6 @@ document.addEventListener('DOMContentLoaded', function() {
 
         document.addEventListener('mousemove', onMouseMove);
         document.addEventListener('mouseup', onMouseUp);
-    });
-
-    // ===== ASSIGNMENT POPOVER (right-click on row) =====
-    const popover = document.getElementById('assign-popover');
-    let activeRow = null;
-
-    document.querySelectorAll('.gantt-row').forEach(row => {
-        row.addEventListener('contextmenu', function(e) {
-            e.preventDefault();
-            activeRow = this;
-            const procs = JSON.parse(this.dataset.procs || '{}');
-
-            // Position popover
-            popover.style.left = e.pageX + 'px';
-            popover.style.top = e.pageY + 'px';
-            popover.classList.add('active');
-
-            // Set current values
-            popover.querySelectorAll('.assign-select').forEach(sel => {
-                const proc = sel.dataset.proceso;
-                const data = procs[proc];
-                sel.value = data?.asignado || '';
-                sel.dataset.muebleId = this.dataset.muebleId;
-            });
-
-            document.getElementById('assign-title').textContent = 'Asignar equipo - Mueble ' + this.querySelector('td').textContent.trim();
-        });
-    });
-
-    document.getElementById('assign-cancel').addEventListener('click', () => {
-        popover.classList.remove('active');
-        activeRow = null;
-    });
-
-    document.addEventListener('click', function(e) {
-        if (!popover.contains(e.target) && !e.target.closest('.gantt-row')) {
-            popover.classList.remove('active');
-            activeRow = null;
-        }
-    });
-
-    // Handle assignment change
-    popover.querySelectorAll('.assign-select').forEach(sel => {
-        sel.addEventListener('change', function() {
-            if (!activeRow) return;
-            const muebleId = this.dataset.muebleId;
-            const proceso = this.dataset.proceso;
-            const personalId = this.value;
-            const procs = JSON.parse(activeRow.dataset.procs || '{}');
-            const prevPersonalId = procs[proceso]?.asignado || '';
-
-            // Hide all date rows first
-            const dateRow = popover.querySelector('.assign-dates[data-proceso="' + proceso + '"]');
-
-            if (personalId && prevPersonalId && personalId !== prevPersonalId) {
-                // Reassign existing times
-                if (dateRow) dateRow.classList.add('hidden');
-                fetch('{{ route("tiempos.reasignarEquipo") }}', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json', 'X-CSRF-TOKEN': csrfToken, 'Accept': 'application/json' },
-                    body: JSON.stringify({
-                        mueble_id: muebleId,
-                        proceso: proceso,
-                        personal_id: personalId,
-                        personal_anterior_id: prevPersonalId
-                    })
-                })
-                .then(r => r.json())
-                .then(data => {
-                    if (data.ok) {
-                        this.style.backgroundColor = '#d1fae5';
-                        setTimeout(() => location.reload(), 500);
-                    }
-                })
-                .catch(() => alert('Error al reasignar equipo'));
-            } else if (personalId && !prevPersonalId) {
-                // New assignment — show date fields to create initial range
-                if (dateRow) {
-                    dateRow.classList.remove('hidden');
-                    // Set default dates: project start + 5 days
-                    const proyectoId = activeRow.dataset.proyectoId;
-                    const today = new Date().toISOString().split('T')[0];
-                    const inicio = dateRow.querySelector('.assign-fecha-inicio');
-                    const fin = dateRow.querySelector('.assign-fecha-fin');
-                    if (inicio && !inicio.value) inicio.value = today;
-                    if (fin && !fin.value) {
-                        // Default: 1 week from start
-                        const d = new Date();
-                        d.setDate(d.getDate() + 7);
-                        fin.value = d.toISOString().split('T')[0];
-                    }
-                }
-            } else if (!personalId) {
-                if (dateRow) dateRow.classList.add('hidden');
-            }
-        });
-    });
-
-    document.getElementById('edit-personas-cancel').addEventListener('click', function() {
-        editPopup.classList.remove('active');
-        editingBar = null;
-    });
-
-    function saveEditPersonas() {
-        if (!editingBar) return;
-        const newPersonas = parseFloat(editInput.value) || 1;
-        const bar = editingBar;
-
-        editPopup.classList.remove('active');
-
-        fetch('{{ route("tiempos.guardarRango") }}', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json', 'X-CSRF-TOKEN': csrfToken, 'Accept': 'application/json' },
-            body: JSON.stringify({
-                mueble_id: parseInt(bar.dataset.muebleId),
-                proceso: bar.dataset.proceso,
-                personal_id: parseInt(bar.dataset.personalId),
-                fecha_inicio: bar.dataset.firstDate,
-                fecha_fin: bar.dataset.lastDate,
-                personas: newPersonas
-            })
-        })
-        .then(r => r.json())
-        .then(data => {
-            if (data.ok || data.success) {
-                bar.dataset.personas = newPersonas;
-                const procesoLabels2 = { 'Carpintería': 'Carp.', 'Barniz': 'Barniz', 'Instalación': 'Inst.' };
-                const label2 = procesoLabels2[bar.dataset.proceso] || bar.dataset.proceso.charAt(0);
-                const pVal2 = newPersonas % 1 === 0 ? Math.round(newPersonas) : newPersonas;
-                bar.childNodes[0].textContent = label2 + (newPersonas > 0 ? ' ' + pVal2 : '');
-                bar.style.backgroundColor = bar.dataset.color + 'AA';
-            } else {
-                alert('Error: ' + (data.error || JSON.stringify(data)));
-            }
-        })
-        .catch(() => alert('Error al actualizar personas'));
-
-        editingBar = null;
-    }
-
-    document.getElementById('edit-personas-save').addEventListener('click', saveEditPersonas);
-    editInput.addEventListener('keydown', function(e) {
-        if (e.key === 'Enter') saveEditPersonas();
-        if (e.key === 'Escape') { editPopup.classList.remove('active'); editingBar = null; }
-    });
-
-    // Handle "Crear" button — save new range
-    popover.querySelectorAll('.assign-save-btn').forEach(btn => {
-        btn.addEventListener('click', function() {
-            if (!activeRow) return;
-            const proceso = this.dataset.proceso;
-            const muebleId = activeRow.dataset.muebleId;
-            const select = popover.querySelector('.assign-select[data-proceso="' + proceso + '"]');
-            const personalId = select?.value;
-            const fechaInicio = popover.querySelector('.assign-fecha-inicio[data-proceso="' + proceso + '"]')?.value;
-            const fechaFin = popover.querySelector('.assign-fecha-fin[data-proceso="' + proceso + '"]')?.value;
-            const personas = parseFloat(popover.querySelector('.assign-personas[data-proceso="' + proceso + '"]')?.value) || 1;
-
-            if (!personalId) return alert('Selecciona una persona');
-            if (!fechaInicio || !fechaFin) return alert('Selecciona fechas de inicio y fin');
-            if (fechaInicio > fechaFin) return alert('La fecha inicio debe ser antes de la fecha fin');
-
-            this.disabled = true;
-            this.textContent = '...';
-
-            fetch('{{ route("tiempos.guardarRango") }}', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json', 'X-CSRF-TOKEN': csrfToken, 'Accept': 'application/json' },
-                body: JSON.stringify({
-                    mueble_id: parseInt(muebleId),
-                    proceso: proceso,
-                    personal_id: parseInt(personalId),
-                    fecha_inicio: fechaInicio,
-                    fecha_fin: fechaFin,
-                    personas: personas
-                })
-            })
-            .then(r => r.json())
-            .then(data => {
-                if (data.ok) {
-                    location.reload();
-                } else {
-                    alert('Error: ' + (data.error || JSON.stringify(data)));
-                    this.disabled = false;
-                    this.textContent = 'Crear';
-                }
-            })
-            .catch(() => {
-                alert('Error al crear rango');
-                this.disabled = false;
-                this.textContent = 'Crear';
-            });
-        });
     });
     // ========== FECHA ENTREGA POR MUEBLE ==========
     function paintFechaEntrega(row) {
@@ -1087,6 +1047,21 @@ document.addEventListener('DOMContentLoaded', function() {
             fePopup.classList.remove('active');
         }
     });
+
+    // Rebuild Gantt bars when project becomes visible via dropdown
+    // (bars need real column widths, which are 0 while x-show hides the block).
+    const proyectoSelector = document.getElementById('proyecto-selector');
+    function rebuildVisibleGantt() {
+        requestAnimationFrame(() => requestAnimationFrame(() => {
+            buildAllGanttBars();
+            document.querySelectorAll('tr.gantt-row[data-mueble-id]').forEach(paintFechaEntrega);
+        }));
+    }
+    if (proyectoSelector) {
+        proyectoSelector.addEventListener('change', rebuildVisibleGantt);
+        // Initial paint when a project is restored from sessionStorage on page load
+        if (proyectoSelector.value) rebuildVisibleGantt();
+    }
 });
 </script>
 @endpush

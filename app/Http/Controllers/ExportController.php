@@ -58,20 +58,6 @@ class ExportController extends Controller
         }, $filename, ['Content-Type' => 'text/html']);
     }
 
-    public function exportarDashboardHtml(Request $request)
-    {
-        $controller = app()->make(\App\Http\Controllers\TiempoController::class);
-        $view = $controller->dashboard($request);
-        $content = $view->render();
-
-        $html = $this->wrapHtml('Dashboard - ' . now()->format('d/m/Y'), $content);
-
-        $filename = 'Dashboard_' . now()->format('Ymd') . '.html';
-        return response()->streamDownload(function () use ($html) {
-            echo $html;
-        }, $filename, ['Content-Type' => 'text/html']);
-    }
-
     public function exportarNominaExcel(Request $request)
     {
         $anio = $request->integer('anio', now()->year);

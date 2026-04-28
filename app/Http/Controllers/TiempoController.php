@@ -116,25 +116,34 @@ class TiempoController extends Controller
             'personas' => 'required|numeric|min:0.5|max:24',
         ]);
 
-        // Delete existing entries for this mueble+proceso
+        // Delete existing entries only for this specific person on this mueble+proceso
+        // (preserves other people's assignments on the same bar).
         Tiempo::where('mueble_id', $data['mueble_id'])
             ->where('proceso', $data['proceso'])
+            ->where('personal_id', $data['personal_id'])
             ->delete();
 
-        // Create entries for each working day in the range (skip weekends and holidays)
+        // Create entries for each working day in the range (skip weekends and holidays).
+        // Skip days that are already taken by another person on the same mueble+proceso.
         $periodo = CarbonPeriod::create($data['fecha_inicio'], $data['fecha_fin']);
         $created = 0;
         foreach ($periodo as $dia) {
-            if (DiaFestivo::esDiaLaborable($dia)) {
-                Tiempo::create([
-                    'mueble_id' => $data['mueble_id'],
-                    'proceso' => $data['proceso'],
-                    'personal_id' => $data['personal_id'],
-                    'fecha' => $dia->format('Y-m-d'),
-                    'horas' => $data['personas'],
-                ]);
-                $created++;
-            }
+            if (!DiaFestivo::esDiaLaborable($dia)) continue;
+            $diaStr = $dia->format('Y-m-d');
+            $tomado = Tiempo::where('mueble_id', $data['mueble_id'])
+                ->where('proceso', $data['proceso'])
+                ->where('fecha', $diaStr)
+                ->where('personal_id', '!=', $data['personal_id'])
+                ->exists();
+            if ($tomado) continue;
+            Tiempo::create([
+                'mueble_id' => $data['mueble_id'],
+                'proceso' => $data['proceso'],
+                'personal_id' => $data['personal_id'],
+                'fecha' => $diaStr,
+                'horas' => $data['personas'],
+            ]);
+            $created++;
         }
 
         return response()->json(['ok' => true, 'dias_creados' => $created]);
@@ -152,244 +161,6 @@ class TiempoController extends Controller
             ->delete();
 
         return response()->json(['ok' => true]);
-    }
-
-    public function dashboard(Request $request)
-    {
-        $proyectos = Proyecto::where('status', 'activo')->orderBy('fecha_inicio')->get();
-
-        if ($proyectos->isEmpty()) {
-            return view('tiempos.dashboard', [
-                'personal' => collect(),
-                'diasHabiles' => [],
-                'disponibilidad' => [],
-                'proyectos' => $proyectos,
-            ]);
-        }
-
-        $rangoMin = $proyectos->min('fecha_inicio');
-        $rangoMax = $proyectos->max(fn($p) => $p->fecha_fin);
-
-        // Rolling window: 2 weeks back from today to furthest project end
-        $defaultStart = Carbon::now()->startOfWeek()->subWeeks(2);
-        $fechaMin = $request->has('desde')
-            ? Carbon::parse($request->input('desde'))->startOfWeek()
-            : $defaultStart;
-        $fechaMax = $rangoMax;
-
-        if ($fechaMin->lt($rangoMin)) {
-            $fechaMin = $rangoMin->copy();
-        }
-
-        $canGoBack = $fechaMin->gt($rangoMin);
-        $prevDesde = $fechaMin->copy()->subWeeks(2)->format('Y-m-d');
-        $nextDesde = $fechaMin->copy()->addWeeks(2)->format('Y-m-d');
-        $todayDesde = $defaultStart->format('Y-m-d');
-        $allDesde = $rangoMin->format('Y-m-d');
-
-        $festivos = DiaFestivo::whereBetween('fecha', [$fechaMin, $fechaMax])->pluck('nombre', 'fecha')->mapWithKeys(fn($n, $f) => [Carbon::parse($f)->format('Y-m-d') => $n]);
-
-        $diasHabiles = [];
-        $periodo = CarbonPeriod::create($fechaMin, $fechaMax);
-        foreach ($periodo as $dia) {
-            if ($dia->isWeekday()) {
-                $diasHabiles[] = $dia->copy();
-            }
-        }
-
-        // Only show leaders (each represents their team)
-        $lideres = Personal::where('activo', true)->where('es_lider', true)
-            ->orderBy('equipo')->orderBy('nombre')->get();
-
-        // Also include departments with no leader (solo workers)
-        $deptsSinLider = Personal::where('activo', true)
-            ->whereNotIn('equipo', $lideres->pluck('equipo')->unique())
-            ->orderBy('equipo')->orderBy('nombre')->get();
-
-        $personal = $lideres->merge($deptsSinLider);
-
-        $tiempos = Tiempo::whereIn('personal_id', $personal->pluck('id'))
-            ->whereBetween('fecha', [$fechaMin, $fechaMax])
-            ->where('horas', '>', 0)
-            ->with('mueble.proyecto')
-            ->get();
-
-        // Pre-index tiempos by personal_id + fecha for O(1) lookup
-        $tiemposIndex = [];
-        foreach ($tiempos as $t) {
-            $key = $t->personal_id . '_' . $t->fecha->format('Y-m-d');
-            $tiemposIndex[$key][] = $t;
-        }
-
-        // Load nomina data for people without tiempos (non-Vista-General departments)
-        $nominaEntries = NominaDiaria::whereIn('personal_id', $personal->pluck('id'))
-            ->whereBetween('fecha', [$fechaMin, $fechaMax])
-            ->whereNotNull('proyecto_id')
-            ->with('proyecto')
-            ->get();
-
-        $nominaIndex = [];
-        foreach ($nominaEntries as $n) {
-            $key = $n->personal_id . '_' . $n->fecha->format('Y-m-d');
-            $nominaIndex[$key] = $n;
-        }
-
-        $disponibilidad = [];
-        foreach ($personal as $p) {
-            foreach ($diasHabiles as $dia) {
-                $fechaStr = $dia->format('Y-m-d');
-                $registros = $tiemposIndex[$p->id . '_' . $fechaStr] ?? [];
-
-                $nombres = [];
-                $totalHoras = 0;
-
-                $source = 'tiempos';
-
-                if (!empty($registros)) {
-                    foreach ($registros as $t) {
-                        $nombres[] = $t->mueble->proyecto->nombre;
-                        $totalHoras += $t->horas;
-                    }
-                } else {
-                    $nomina = $nominaIndex[$p->id . '_' . $fechaStr] ?? null;
-                    if ($nomina && $nomina->proyecto) {
-                        $nombres[] = $nomina->proyecto->nombre;
-                        $source = 'nomina';
-                    }
-                }
-
-                $nombres = array_values(array_unique($nombres));
-
-                $disponibilidad[$p->id][$fechaStr] = [
-                    'proyectos' => count($nombres),
-                    'nombres' => $nombres,
-                    'horas' => $totalHoras,
-                    'source' => $source,
-                ];
-            }
-        }
-
-        // Team member counts per leader
-        $teamCounts = Personal::where('activo', true)->whereNotNull('lider_id')
-            ->selectRaw('lider_id, count(*) as total')
-            ->groupBy('lider_id')
-            ->pluck('total', 'lider_id');
-
-        // === CAPACITY DATA: all active personnel (not just leaders) ===
-        $todosActivos = Personal::where('activo', true)->get();
-        $todosIds = $todosActivos->pluck('id');
-
-        // Department totals
-        $deptTotals = $todosActivos->groupBy('equipo')->map->count();
-
-        // Load only tiempos/nomina for non-leader personnel (leaders already loaded above)
-        $leaderIds = $personal->pluck('id');
-        $nonLeaderIds = $todosIds->diff($leaderIds);
-
-        $extraTiempos = $nonLeaderIds->isNotEmpty()
-            ? Tiempo::whereIn('personal_id', $nonLeaderIds)
-                ->whereBetween('fecha', [$fechaMin, $fechaMax])
-                ->where('horas', '>', 0)
-                ->with('mueble.proyecto')
-                ->get()
-            : collect();
-
-        $extraNomina = $nonLeaderIds->isNotEmpty()
-            ? NominaDiaria::whereIn('personal_id', $nonLeaderIds)
-                ->whereBetween('fecha', [$fechaMin, $fechaMax])
-                ->whereNotNull('proyecto_id')
-                ->with('proyecto')
-                ->get()
-            : collect();
-
-        // Merge with already-loaded leader data
-        $allTiempos = $tiempos->merge($extraTiempos);
-        $allNomina = $nominaEntries->merge($extraNomina);
-
-        // Build per-person per-day: project/process => personas count
-        // Sum horas across muebles (1 persona per mueble = N personas total)
-        $personDayProject = [];
-        $personDayProjectProceso = [];
-        $muebleHoras = []; // [personalId][date][projName][proceso][muebleId] => max horas
-        foreach ($allTiempos as $t) {
-            $fechaStr = $t->fecha->format('Y-m-d');
-            $projName = $t->mueble->proyecto->nombre;
-            $muebleHoras[$t->personal_id][$fechaStr][$projName][$t->proceso][$t->mueble_id] = max(
-                $muebleHoras[$t->personal_id][$fechaStr][$projName][$t->proceso][$t->mueble_id] ?? 0,
-                $t->horas
-            );
-        }
-        foreach ($muebleHoras as $personalId => $fechas) {
-            foreach ($fechas as $fechaStr => $proyectos_data) {
-                $key = $personalId . '_' . $fechaStr;
-                foreach ($proyectos_data as $projName => $procesos_data) {
-                    $totalProj = 0;
-                    foreach ($procesos_data as $proceso => $muebles) {
-                        $sumProceso = array_sum($muebles);
-                        $personDayProjectProceso[$key][$projName][$proceso] = $sumProceso;
-                        $totalProj += $sumProceso;
-                    }
-                    $personDayProject[$key][$projName] = $totalProj;
-                }
-            }
-        }
-        foreach ($allNomina as $n) {
-            $key = $n->personal_id . '_' . $n->fecha->format('Y-m-d');
-            if (!isset($personDayProject[$key]) && $n->proyecto) {
-                $personDayProject[$key][$n->proyecto->nombre] = 1; // nomina = 1 person
-            }
-        }
-
-        // Group days by week
-        $semanas = collect($diasHabiles)->groupBy(fn($d) => $d->weekOfYear);
-
-        // Project capacity per process: projName => proceso => [semana => totalPersonas]
-        $proyectoCapacidadProceso = [];
-        $procesos = ['Carpintería', 'Barniz', 'Instalación'];
-
-        foreach ($semanas as $numSemana => $diasSemana) {
-            $leaderMaxPerProjectProceso = []; // projName => proceso => [personalId => maxPersonas]
-            $personasAsignadasPorDept = []; // equipo => [personIds]
-
-            foreach ($diasSemana as $dia) {
-                $fechaStr = $dia->format('Y-m-d');
-                foreach ($todosActivos as $p) {
-                    $key = $p->id . '_' . $fechaStr;
-
-                    // Per-process tracking
-                    $proyectosProceso = $personDayProjectProceso[$key] ?? [];
-                    foreach ($proyectosProceso as $projNombre => $procData) {
-                        foreach ($procData as $proc => $personas) {
-                            $leaderMaxPerProjectProceso[$projNombre][$proc][$p->id] = max(
-                                $leaderMaxPerProjectProceso[$projNombre][$proc][$p->id] ?? 0,
-                                $personas
-                            );
-                        }
-                    }
-
-                    $proyectos_dia = $personDayProject[$key] ?? [];
-                    if (!empty($proyectos_dia)) {
-                        $personasAsignadasPorDept[$p->equipo][$p->id] = true;
-                    }
-                }
-            }
-
-            foreach ($leaderMaxPerProjectProceso as $projNombre => $procData) {
-                foreach ($procData as $proc => $leaders) {
-                    $proyectoCapacidadProceso[$projNombre][$proc][$numSemana] = (int) array_sum($leaders);
-                }
-            }
-        }
-
-        ksort($proyectoCapacidadProceso);
-
-        $semanasNums = $semanas->keys()->sort()->values();
-
-        return view('tiempos.dashboard', compact(
-            'personal', 'diasHabiles', 'disponibilidad', 'proyectos', 'festivos',
-            'teamCounts', 'proyectoCapacidadProceso', 'deptTotals', 'semanasNums',
-            'canGoBack', 'prevDesde', 'nextDesde', 'todayDesde', 'allDesde'
-        ));
     }
 
     public function recorrerFechas(Request $request, Proyecto $proyecto)
@@ -624,24 +395,18 @@ class TiempoController extends Controller
             return view('tiempos.general', ['proyectos' => $proyectos, 'diasHabiles' => [], 'tiemposMap' => [], 'ventanaInicio' => null, 'ventanaFin' => null]);
         }
 
-        // Full project range (for data queries)
+        // Full project range (for navigation bounds only)
         $rangoMin = $proyectos->min('fecha_inicio');
         $rangoMax = $proyectos->max(fn($p) => $p->fecha_fin);
 
-        // Rolling window: default = 2 weeks back from today, extends to furthest project end
-        // User can override with ?desde= parameter to navigate
-        $defaultStart = Carbon::now()->startOfWeek()->subWeeks(2);
+        // Fixed 4-week window: -1, current, +1, +2 (week-of-year semantics)
+        // User can override with ?desde= to navigate 1 week at a time.
+        $defaultStart = Carbon::now()->startOfWeek()->subWeek();
         $ventanaInicio = $request->has('desde')
             ? Carbon::parse($request->input('desde'))->startOfWeek()
             : $defaultStart;
 
-        // Always extend to the furthest active project end
-        $ventanaFin = $rangoMax;
-
-        // Clamp to not go before earliest project
-        if ($ventanaInicio->lt($rangoMin)) {
-            $ventanaInicio = $rangoMin->copy();
-        }
+        $ventanaFin = $ventanaInicio->copy()->addWeeks(4)->subDay();
 
         $festivos = DiaFestivo::whereBetween('fecha', [$ventanaInicio, $ventanaFin])->pluck('nombre', 'fecha')->mapWithKeys(fn($n, $f) => [Carbon::parse($f)->format('Y-m-d') => $n]);
 
@@ -667,10 +432,10 @@ class TiempoController extends Controller
         $personal = Personal::where('activo', true)->get()->keyBy('id');
         $procesos = ['Carpintería', 'Barniz', 'Instalación'];
 
-        // Navigation data
-        $canGoBack = $ventanaInicio->gt($rangoMin);
-        $prevDesde = $ventanaInicio->copy()->subWeeks(2)->format('Y-m-d');
-        $nextDesde = $ventanaInicio->copy()->addWeeks(2)->format('Y-m-d');
+        // Navigation data (1-week step)
+        $canGoBack = true;
+        $prevDesde = $ventanaInicio->copy()->subWeek()->format('Y-m-d');
+        $nextDesde = $ventanaInicio->copy()->addWeek()->format('Y-m-d');
         $todayDesde = $defaultStart->format('Y-m-d');
         $allDesde = $rangoMin->format('Y-m-d');
 

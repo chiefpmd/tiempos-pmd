@@ -12,6 +12,7 @@ use App\Http\Controllers\ProyectoMaterialController;
 use App\Http\Controllers\NominaController;
 use App\Http\Controllers\CategoriaNominaController;
 use App\Http\Controllers\EquipoDiarioController;
+use App\Http\Controllers\AsignacionController;
 
 Route::get('/', fn() => redirect('/login'));
 
@@ -20,7 +21,6 @@ Route::post('/login', [AuthController::class, 'login']);
 Route::post('/logout', [AuthController::class, 'logout'])->name('logout');
 
 Route::middleware('auth')->group(function () {
-    Route::get('/dashboard', [TiempoController::class, 'dashboard'])->name('dashboard');
     Route::get('/general', [TiempoController::class, 'vistaGeneral'])->name('general');
     Route::get('/gantt-nomina', [NominaController::class, 'ganttNomina'])->name('gantt.nomina');
     Route::get('/gantt-anual', [TiempoController::class, 'ganttAnual'])->name('gantt.anual');
@@ -33,11 +33,16 @@ Route::middleware('auth')->group(function () {
     Route::get('/export/general', [ExportController::class, 'exportarGeneral'])->name('export.general');
     Route::get('/export/proyecto-html/{proyecto}', [ExportController::class, 'exportarProyectoHtml'])->name('export.proyecto.html');
     Route::get('/export/general-html', [ExportController::class, 'exportarGeneralHtml'])->name('export.general.html');
-    Route::get('/export/dashboard-html', [ExportController::class, 'exportarDashboardHtml'])->name('export.dashboard.html');
     Route::get('/export/nomina-excel', [ExportController::class, 'exportarNominaExcel'])->name('export.nomina.excel');
+
+    // Asignación semanal (panel lateral en Proyección)
+    Route::get('/asignacion/disponibilidad', [AsignacionController::class, 'disponibilidad'])->name('asignacion.disponibilidad');
 
     // Admin-only routes
     Route::middleware('admin')->group(function () {
+        Route::post('/asignacion/asignar', [AsignacionController::class, 'asignar'])->name('asignacion.asignar');
+        Route::post('/asignacion/quitar', [AsignacionController::class, 'quitar'])->name('asignacion.quitar');
+
         Route::post('/gantt-anual/guardar', [TiempoController::class, 'ganttAnualGuardar'])->name('gantt.anual.guardar');
         Route::post('/tiempos/guardar', [TiempoController::class, 'guardar'])->name('tiempos.guardar');
         Route::post('/tiempos/reasignar-equipo', [TiempoController::class, 'reasignarEquipo'])->name('tiempos.reasignarEquipo');

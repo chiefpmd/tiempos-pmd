@@ -13,6 +13,7 @@
         .nav-link { @apply px-3 py-2 rounded-md text-sm font-medium; }
         .nav-active { @apply bg-gray-900 text-white; }
         .nav-inactive { @apply text-gray-100 hover:bg-gray-700 hover:text-white; }
+        [x-cloak] { display: none !important; }
     </style>
     @stack('styles')
 </head>
@@ -22,7 +23,6 @@
             <div class="flex items-center justify-between h-14">
                 <div class="flex items-center space-x-4">
                     <span class="text-white font-bold text-lg">PMD Tiempos</span>
-                    <a href="{{ route('dashboard') }}" class="px-3 py-2 rounded-md text-sm font-medium {{ request()->routeIs('dashboard') ? 'bg-gray-900 text-white' : 'text-gray-100 hover:bg-gray-700 hover:text-white' }}">Dashboard</a>
                     <a href="{{ route('general') }}" class="px-3 py-2 rounded-md text-sm font-medium {{ request()->routeIs('general') ? 'bg-gray-900 text-white' : 'text-gray-100 hover:bg-gray-700 hover:text-white' }}">Proyección</a>
                     <a href="{{ route('gantt.nomina') }}" class="px-3 py-2 rounded-md text-sm font-medium {{ request()->routeIs('gantt.nomina') ? 'bg-gray-900 text-white' : 'text-gray-100 hover:bg-gray-700 hover:text-white' }}">Gantt Nómina</a>
                     <a href="{{ route('gantt.anual') }}" class="px-3 py-2 rounded-md text-sm font-medium {{ request()->routeIs('gantt.anual') ? 'bg-gray-900 text-white' : 'text-gray-100 hover:bg-gray-700 hover:text-white' }}">Gantt Anual</a>
