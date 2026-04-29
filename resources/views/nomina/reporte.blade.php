@@ -26,9 +26,12 @@
     </div>
 </div>
 
-@if($semanasConDatos->isEmpty())
+@if($semanasConDatos->isEmpty() && empty($costoProyectos))
     <p class="text-gray-400 text-sm">No hay datos de nómina para el rango seleccionado.</p>
 @else
+@if($semanasConDatos->isEmpty())
+    <p class="text-gray-400 text-sm mb-2">Sin nómina en el rango. Mostrando proyectos activos para edición de presupuestos.</p>
+@endif
 
 @php
 function renderCostoSection($titulo, $datos, $semanasConDatos, $totalGeneral, $proyectosLink = null, $semanaInicio = null, $semanaFin = null, $anio = null) {

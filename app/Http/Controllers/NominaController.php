@@ -271,7 +271,12 @@ class NominaController extends Controller
         $presupuestoPorProyecto = [];
         foreach ($proyectosActivos as $nombre => $proy) {
             $presupuestoPorProyecto[$nombre] = $proy->muebles->sum('costo_mueble') ?? 0;
+            // Asegurar que aparezcan en el reporte aunque no tengan nómina en el rango
+            if (!isset($costoProyectos[$nombre])) {
+                $costoProyectos[$nombre] = [];
+            }
         }
+        ksort($costoProyectos);
 
         return view('nomina.reporte', compact(
             'anio', 'semanaInicio', 'semanaFin', 'semanasConDatos',
