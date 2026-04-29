@@ -130,6 +130,8 @@
 
 @section('content')
 <div class="max-w-full mx-auto" x-data='proyeccionApp(@json($weeksOptions), "{{ $defaultWeek }}", {{ $isAdminUser ? 'true' : 'false' }})' x-init="init()">
+    <div class="flex gap-3">
+    <div class="flex-1 min-w-0">
     <div class="flex justify-between items-center mb-3">
         <h1 class="text-xl font-bold">Proyección</h1>
         <div class="flex items-center gap-2">
@@ -187,8 +189,7 @@
             $procesoSlots = ['Carpintería' => 0, 'Barniz' => 1, 'Instalación' => 2];
         @endphp
 
-        <div class="flex gap-3" x-show="selected !== ''" x-cloak>
-        <div class="flex-1 min-w-0">
+        <div x-show="selected !== ''" x-cloak>
         @foreach($proyectos as $proyecto)
         <div class="mb-6" x-show="selected === '{{ $proyecto->id }}'" x-cloak>
             <div class="flex items-center space-x-3 mb-1">
@@ -294,7 +295,6 @@
                                     Sem {{ $numSemana }}
                                 </th>
                             @endforeach
-                            <th class="bg-gray-50"></th>
                         </tr>
                         <tr>
                             <th class="px-1 py-1 text-left font-medium text-gray-500 sticky left-0 bg-gray-50 z-20" style="min-width:56px">#</th>
@@ -317,7 +317,6 @@
                                     {{ $dia->format('d/M') }}
                                 </th>
                             @endforeach
-                            <th class="px-1 py-1 text-center font-medium text-gray-500 w-10 bg-gray-50">Dias</th>
                         </tr>
                     </thead>
                     <tbody>
@@ -393,14 +392,6 @@
                                         data-date="{{ $diaStr }}">
                                     </td>
                                 @endforeach
-                                <td class="px-1 py-1 text-center text-[9px] text-gray-400 align-top">
-                                    @foreach($procesos as $proceso)
-                                        @php $mp = $muebleProcs[$proceso]; @endphp
-                                        @if($mp['dias'] > 0)
-                                            <div title="{{ $proceso }}">{{ $mp['dias'] }}</div>
-                                        @endif
-                                    @endforeach
-                                </td>
                             </tr>
                         @endforeach
                     </tbody>
@@ -408,11 +399,14 @@
             </div>
         </div>
         @endforeach
-        </div>{{-- /flex-1 --}}
+        </div>{{-- /x-show selected --}}
+    @endif
+    </div>{{-- /flex-1 --}}
 
+    @if(!$proyectos->isEmpty())
         {{-- Panel lateral inline: personal disponible por semana --}}
-        <aside class="w-60 flex-shrink-0">
-            <div class="sticky top-2 bg-white shadow rounded-lg p-2.5 max-h-[calc(100vh-80px)] overflow-y-auto border border-gray-200">
+        <aside class="w-60 flex-shrink-0" x-show="selected !== ''" x-cloak>
+            <div class="sticky top-2 bg-white shadow rounded-lg p-2.5 max-h-[calc(100vh-16px)] overflow-y-auto border border-gray-200">
         <div class="flex items-center justify-between mb-2">
             <span class="text-xs font-bold text-gray-700 uppercase">Personal</span>
             <button @click="loadPersonal()" class="text-xs text-blue-600 hover:underline" title="Recargar">↻</button>
@@ -457,21 +451,26 @@
                 <div class="text-xs font-semibold text-gray-500 uppercase mb-1" x-text="equipo"></div>
                 <template x-for="p in lista" :key="p.id">
                     <div @click="pick(p.id)"
-                         :class="picked && picked.id === p.id ? 'ring-2 ring-blue-500 bg-blue-50' : 'bg-gray-50 hover:bg-gray-100'"
-                         class="cursor-pointer flex items-center justify-between px-2 py-1 rounded mb-1 text-sm">
+                         :class="[
+                            picked && picked.id === p.id ? 'ring-2 ring-blue-500 bg-blue-50' : 'bg-gray-50 hover:bg-gray-100',
+                            p.dias_libres === 0 ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'
+                         ]"
+                         class="flex items-center justify-between px-2 py-1 rounded mb-1 text-sm">
                         <span class="flex items-center gap-1.5 min-w-0">
                             <span class="w-2.5 h-2.5 rounded-full flex-shrink-0" :style="'background:' + p.color_hex"></span>
                             <span class="truncate" x-text="p.nombre"></span>
                         </span>
-                        <span class="text-xs font-mono bg-white px-1.5 py-0.5 rounded border flex-shrink-0" x-text="p.dias_libres + 'd'"></span>
+                        <span class="text-xs font-mono bg-white px-1.5 py-0.5 rounded border flex-shrink-0"
+                              :class="p.dias_libres === 0 ? 'text-gray-400' : ''"
+                              x-text="p.dias_libres + 'd'"></span>
                     </div>
                 </template>
             </div>
         </template>
             </div>{{-- /sticky --}}
         </aside>
-        </div>{{-- /flex --}}
     @endif
+    </div>{{-- /flex outer --}}
 </div>
 
 <div id="fecha-entrega-popup">
@@ -544,7 +543,8 @@ window.proyeccionApp = function(weeks, defaultWeek, isAdmin) {
             .then(r => r.json().then(d => ({ ok: r.ok, data: d })))
             .then(({ ok, data }) => {
                 if (ok && data.ok) {
-                    location.reload();
+                    this.picked = null;
+                    if (window.refreshAfterChange) window.refreshAfterChange(muebleId);
                 } else {
                     alert(data.error || 'Error al asignar');
                 }
@@ -563,7 +563,7 @@ window.proyeccionApp = function(weeks, defaultWeek, isAdmin) {
 
         porEquipo() {
             const groups = {};
-            this.personal.filter(p => p.dias_libres > 0).forEach(p => {
+            this.personal.forEach(p => {
                 if (!groups[p.equipo]) groups[p.equipo] = [];
                 groups[p.equipo].push(p);
             });
@@ -576,6 +576,29 @@ document.addEventListener('DOMContentLoaded', function() {
     const csrfToken = document.querySelector('meta[name="csrf-token"]').content;
     const procesoColors = { 'Carpintería': '#f59e0b', 'Barniz': '#10b981', 'Instalación': '#3b82f6' };
     const procesoSlots = { 'Carpintería': 0, 'Barniz': 1, 'Instalación': 2 };
+
+    // Refresh in-place after assign/move/resize/quitar (no full page reload)
+    window.refreshAfterChange = function(muebleId) {
+        const app = window.__proyeccionState;
+        if (app && app.loadPersonal) app.loadPersonal();
+
+        const row = document.querySelector('tr.gantt-row[data-mueble-id="' + muebleId + '"]');
+        if (!row) return;
+
+        const params = new URLSearchParams(window.location.search);
+        const desde = params.get('desde');
+        const url = '/muebles/' + muebleId + '/procs' + (desde ? '?desde=' + desde : '');
+
+        fetch(url, { headers: { 'Accept': 'application/json' } })
+            .then(r => r.json())
+            .then(d => {
+                if (d.ok && d.procs) {
+                    row.dataset.procs = JSON.stringify(d.procs);
+                    if (typeof buildGanttBars === 'function') buildGanttBars(row);
+                }
+            })
+            .catch(() => {});
+    };
 
     // Toggle add mueble form
     document.querySelectorAll('.toggle-add-mueble').forEach(btn => {
@@ -804,10 +827,27 @@ document.addEventListener('DOMContentLoaded', function() {
     document.addEventListener('mousedown', function(e) {
         const handle = e.target.closest('.gantt-handle');
         const bar = e.target.closest('.gantt-bar');
+        const app = window.__proyeccionState;
+
+        // Picked + click en celda vacía de una fila Gantt: crea barra usando el slot Y
+        if (app && app.picked && !bar) {
+            const row = e.target.closest('tr.gantt-row[data-mueble-id]');
+            if (row) {
+                const rect = row.getBoundingClientRect();
+                const y = e.clientY - rect.top;
+                let proceso;
+                if (y < 17) proceso = 'Carpintería';
+                else if (y < 33) proceso = 'Barniz';
+                else proceso = 'Instalación';
+                e.preventDefault();
+                app.assignToBar(row.dataset.muebleId, proceso);
+                return;
+            }
+        }
+
         if (!bar) return;
 
         // If a personal card is "picked", clicking a bar assigns the person.
-        const app = window.__proyeccionState;
         if (app && app.picked && !handle) {
             e.preventDefault();
             app.assignToBar(bar.dataset.muebleId, bar.dataset.proceso);
@@ -869,8 +909,9 @@ document.addEventListener('DOMContentLoaded', function() {
                 })
                 .then(r => r.json())
                 .then(d => {
-                    if (d.ok) location.reload();
-                    else alert(d.error || 'Error al liberar');
+                    if (d.ok) {
+                        if (window.refreshAfterChange) window.refreshAfterChange(parseInt(bar.dataset.muebleId));
+                    } else alert(d.error || 'Error al liberar');
                 })
                 .catch(() => alert('Error al liberar'));
                 return;
@@ -914,8 +955,9 @@ document.addEventListener('DOMContentLoaded', function() {
                 })
                 .then(r => r.json())
                 .then(data => {
-                    if (data.ok || data.success) { location.reload(); }
-                    else { alert('Error: ' + (data.error || 'Unknown error')); bar.style.left = origLeft + 'px'; bar.style.opacity = '1'; }
+                    if (data.ok || data.success) {
+                        if (window.refreshAfterChange) window.refreshAfterChange(parseInt(bar.dataset.muebleId));
+                    } else { alert('Error: ' + (data.error || 'Unknown error')); bar.style.left = origLeft + 'px'; bar.style.opacity = '1'; }
                 })
                 .catch(() => { alert('Error al mover'); bar.style.left = origLeft + 'px'; bar.style.opacity = '1'; });
 
@@ -952,8 +994,9 @@ document.addEventListener('DOMContentLoaded', function() {
                 })
                 .then(r => r.json())
                 .then(data => {
-                    if (data.ok || data.success) { location.reload(); }
-                    else { alert('Error: ' + (data.error || 'Unknown error')); buildGanttBars(row); }
+                    if (data.ok || data.success) {
+                        if (window.refreshAfterChange) window.refreshAfterChange(parseInt(bar.dataset.muebleId));
+                    } else { alert('Error: ' + (data.error || 'Unknown error')); buildGanttBars(row); }
                 })
                 .catch(() => { alert('Error al guardar rango'); buildGanttBars(row); });
             }

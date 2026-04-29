@@ -107,18 +107,22 @@ class AsignacionController extends Controller
             ->first();
 
         if (!$rango || !$rango->fmin) {
-            return response()->json(['ok' => false, 'error' => 'No hay rango definido para este proceso. Crea la barra primero arrastrando.'], 422);
+            // Sin barra previa: crear una usando la semana seleccionada como rango inicial
+            $procesoInicio = $semanaInicio->copy();
+            $procesoFin = $semanaFin->copy();
+        } else {
+            $procesoInicio = Carbon::parse($rango->fmin);
+            $procesoFin = Carbon::parse($rango->fmax);
+            // Si la semana del sticky no se solapa con el rango global, usar la semana
+            // como rango (permite asignar antes/después del rango actual)
+            if ($semanaFin->lessThan($procesoInicio) || $semanaInicio->greaterThan($procesoFin)) {
+                $procesoInicio = $semanaInicio->copy();
+                $procesoFin = $semanaFin->copy();
+            }
         }
-
-        $procesoInicio = Carbon::parse($rango->fmin);
-        $procesoFin = Carbon::parse($rango->fmax);
 
         $inicio = $semanaInicio->greaterThan($procesoInicio) ? $semanaInicio : $procesoInicio;
         $fin = $semanaFin->lessThan($procesoFin) ? $semanaFin : $procesoFin;
-
-        if ($inicio->greaterThan($fin)) {
-            return response()->json(['ok' => false, 'error' => 'La barra no cubre esta semana'], 422);
-        }
 
         $festivos = DiaFestivo::whereBetween('fecha', [$semanaInicio, $semanaFin])
             ->pluck('fecha')

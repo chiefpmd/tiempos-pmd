@@ -37,6 +37,7 @@ Route::middleware('auth')->group(function () {
 
     // Asignación semanal (panel lateral en Proyección)
     Route::get('/asignacion/disponibilidad', [AsignacionController::class, 'disponibilidad'])->name('asignacion.disponibilidad');
+    Route::get('/muebles/{mueble}/procs', [TiempoController::class, 'muebleProcs'])->name('muebles.procs');
 
     // Admin-only routes
     Route::middleware('admin')->group(function () {

@@ -462,4 +462,59 @@ class TiempoController extends Controller
             'realMap'
         ));
     }
+
+    public function muebleProcs(Mueble $mueble, Request $request)
+    {
+        $defaultStart = Carbon::now()->startOfWeek()->subWeek();
+        $ventanaInicio = $request->has('desde')
+            ? Carbon::parse($request->input('desde'))->startOfWeek()
+            : $defaultStart;
+        $ventanaFin = $ventanaInicio->copy()->addWeeks(4)->subDay();
+
+        $diasHabiles = [];
+        $periodo = CarbonPeriod::create($ventanaInicio, $ventanaFin);
+        foreach ($periodo as $dia) {
+            if ($dia->isWeekday()) $diasHabiles[] = $dia->format('Y-m-d');
+        }
+
+        $procesos = ['Carpintería', 'Barniz', 'Instalación'];
+        $personal = Personal::where('activo', true)->get()->keyBy('id');
+
+        $tiempos = Tiempo::where('mueble_id', $mueble->id)
+            ->where('horas', '>', 0)
+            ->whereBetween('fecha', [$ventanaInicio, $ventanaFin])
+            ->get();
+
+        $muebleProcs = [];
+        foreach ($procesos as $proceso) {
+            $tiemposProceso = $tiempos->where('proceso', $proceso);
+            $bloques = [];
+            $diasCount = 0;
+            $byPersonaSemana = $tiemposProceso->groupBy(fn($t) => $t->personal_id . '|' . $t->fecha->copy()->startOfWeek()->format('Y-m-d'));
+            foreach ($byPersonaSemana as $key => $grupo) {
+                [$pid, $semanaInicio] = explode('|', $key);
+                $pid = (int) $pid;
+                $persona = $personal[$pid] ?? null;
+                $fechas = $grupo->pluck('fecha')->map(fn($f) => $f->format('Y-m-d'));
+                $fechasVisibles = $fechas->intersect($diasHabiles)->sort()->values();
+                if ($fechasVisibles->isEmpty()) continue;
+                $bloques[] = [
+                    'personal_id' => $pid,
+                    'nombre' => $persona?->nombre ?? '?',
+                    'color_hex' => $persona?->color_hex ?? '#9ca3af',
+                    'fecha_min' => $fechasVisibles->first(),
+                    'fecha_max' => $fechasVisibles->last(),
+                    'dias' => $fechasVisibles->count(),
+                    'semana_inicio' => $semanaInicio,
+                ];
+                $diasCount += $fechasVisibles->count();
+            }
+            $muebleProcs[$proceso] = [
+                'bloques' => $bloques,
+                'dias' => $diasCount,
+            ];
+        }
+
+        return response()->json(['ok' => true, 'procs' => $muebleProcs]);
+    }
 }
