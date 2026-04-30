@@ -3,11 +3,13 @@
 namespace App\Http\Controllers;
 
 use App\Models\DiaFestivo;
+use App\Models\NominaDiaria;
 use App\Models\Personal;
 use App\Models\Tiempo;
 use Carbon\Carbon;
 use Carbon\CarbonPeriod;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
 
 class AsignacionController extends Controller
 {
@@ -27,13 +29,20 @@ class AsignacionController extends Controller
             ->get()
             ->groupBy('personal_id');
 
+        // Cualquier registro en nómina cuenta como ocupado: cubre ausencias, "tienda completa"
+        // y equipos que no se siembran (Vidrio, Herrero, Eléctrico, Tapicero, Mantenimiento)
+        // pero que sí se imputan a muebles en nómina.
+        $nominaEnSemana = NominaDiaria::whereBetween('fecha', [$semanaInicio, $semanaFin])
+            ->get(['personal_id', 'fecha'])
+            ->groupBy('personal_id');
+
         $resultado = [];
         foreach ($personal as $p) {
             $tiempos = $tiemposEnSemana->get($p->id, collect());
-            $diasOcupados = $tiempos
-                ->groupBy(fn($t) => $t->fecha->format('Y-m-d'))
-                ->keys()
-                ->count();
+            $diasDesdeTiempos = $tiempos->map(fn($t) => $t->fecha->format('Y-m-d'));
+            $diasDesdeNomina = ($nominaEnSemana->get($p->id) ?? collect())
+                ->map(fn($n) => Carbon::parse($n->fecha)->format('Y-m-d'));
+            $diasOcupados = $diasDesdeTiempos->merge($diasDesdeNomina)->unique()->count();
 
             $diasLibres = max(0, $diasLab - $diasOcupados);
 
@@ -87,10 +96,17 @@ class AsignacionController extends Controller
             return response()->json(['ok' => false, 'error' => 'No hay días laborables en esta semana'], 422);
         }
 
-        $diasOcupadosPersona = Tiempo::where('personal_id', $data['personal_id'])
+        $diasDesdeTiempos = Tiempo::where('personal_id', $data['personal_id'])
             ->whereBetween('fecha', [$semanaInicio, $semanaFin])
             ->pluck('fecha')
-            ->map(fn($d) => Carbon::parse($d)->format('Y-m-d'))
+            ->map(fn($d) => Carbon::parse($d)->format('Y-m-d'));
+
+        $diasDesdeNomina = NominaDiaria::where('personal_id', $data['personal_id'])
+            ->whereBetween('fecha', [$semanaInicio, $semanaFin])
+            ->pluck('fecha')
+            ->map(fn($d) => Carbon::parse($d)->format('Y-m-d'));
+
+        $diasOcupadosPersona = $diasDesdeTiempos->merge($diasDesdeNomina)
             ->unique()
             ->values()
             ->toArray();

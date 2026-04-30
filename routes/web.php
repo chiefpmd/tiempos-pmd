@@ -67,6 +67,7 @@ Route::middleware('auth')->group(function () {
         Route::post('/proyecto/{proyecto}/muebles', [MuebleController::class, 'store'])->name('muebles.store');
         Route::delete('/muebles/{mueble}', [MuebleController::class, 'destroy'])->name('muebles.destroy');
         Route::post('/muebles/{mueble}/fecha-entrega', [MuebleController::class, 'guardarFechaEntrega'])->name('muebles.fechaEntrega');
+        Route::post('/muebles/{mueble}/instalar', [MuebleController::class, 'marcarInstalado'])->name('muebles.instalar');
 
         Route::post('/proyecto/{proyecto}/materiales', [ProyectoMaterialController::class, 'guardar'])->name('materiales.guardar');
 

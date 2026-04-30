@@ -381,7 +381,7 @@ class TiempoController extends Controller
                 })
                 ->select('muebles.*', DB::raw('MIN(tiempos.fecha) as min_carpinteria'))
                 ->groupBy('muebles.id')
-                ->orderByRaw('min_carpinteria IS NULL, min_carpinteria ASC');
+                ->orderByRaw('muebles.fecha_instalado IS NOT NULL, min_carpinteria IS NULL, min_carpinteria ASC');
             }, 'materiales'])
             ->orderBy('fecha_inicio');
 

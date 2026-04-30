@@ -32,4 +32,13 @@ class MuebleController extends Controller
         $mueble->update($data);
         return response()->json(['ok' => true]);
     }
+
+    public function marcarInstalado(Request $request, Mueble $mueble)
+    {
+        $data = $request->validate([
+            'fecha_instalado' => 'nullable|date',
+        ]);
+        $mueble->update($data);
+        return response()->json(['ok' => true, 'fecha_instalado' => $mueble->fecha_instalado?->format('Y-m-d')]);
+    }
 }

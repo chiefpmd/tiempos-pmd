@@ -92,6 +92,11 @@
         background: #f97316; z-index: 4;
     }
 
+    /* Mueble instalado: atenuado, no editable */
+    tr.mueble-instalado { opacity: 0.45; background-color: #f9fafb; }
+    tr.mueble-instalado .day-cell { pointer-events: none; }
+    tr.mueble-instalado .gantt-bar { pointer-events: none; filter: grayscale(0.7); }
+
     /* Fecha entrega popup */
     #fecha-entrega-popup {
         display: none; position: fixed; z-index: 100; background: #fff; border: 2px solid #f97316;
@@ -359,15 +364,21 @@
                                 }
                                 $totalDias = collect($muebleProcs)->sum('dias');
                             @endphp
-                            <tr class="hover:bg-gray-50 border-b border-gray-100 {{ $mi > 0 ? 'mueble-sep' : '' }} gantt-row"
+                            <tr class="hover:bg-gray-50 border-b border-gray-100 {{ $mi > 0 ? 'mueble-sep' : '' }} gantt-row {{ $mueble->fecha_instalado ? 'mueble-instalado' : '' }}"
                                 data-mueble-id="{{ $mueble->id }}"
                                 data-proyecto-id="{{ $proyecto->id }}"
                                 data-procs='@json($muebleProcs)'
                                 data-fecha-entrega="{{ $mueble->fecha_entrega?->format('Y-m-d') ?? '' }}"
+                                data-fecha-instalado="{{ $mueble->fecha_instalado?->format('Y-m-d') ?? '' }}"
                             >
                                 <td class="px-1 py-1 font-medium sticky left-0 bg-white z-10 align-top text-xs">
                                     {{ $mueble->numero }}
                                     @if($isAdmin)
+                                        @if($mueble->fecha_instalado)
+                                            <button type="button" class="btn-instalar text-green-600 hover:text-green-800 ml-1" title="Instalado {{ $mueble->fecha_instalado->format('d/m') }} — clic para revertir">✓</button>
+                                        @else
+                                            <button type="button" class="btn-instalar text-gray-300 hover:text-green-600 ml-1" title="Marcar como instalado">✓</button>
+                                        @endif
                                         <form method="POST" action="{{ route('muebles.destroy', $mueble) }}" class="inline" onsubmit="return confirm('Eliminar mueble {{ $mueble->numero }}?')">
                                             @csrf @method('DELETE')
                                             <button class="text-red-400 hover:text-red-600 ml-1">&times;</button>
@@ -564,8 +575,10 @@ window.proyeccionApp = function(weeks, defaultWeek, isAdmin) {
         porEquipo() {
             const groups = {};
             this.personal.forEach(p => {
-                if (!groups[p.equipo]) groups[p.equipo] = [];
-                groups[p.equipo].push(p);
+                // Armado se muestra junto con Carpintería en la Proyección.
+                const grupo = p.equipo === 'Armado' ? 'Carpintería' : p.equipo;
+                if (!groups[grupo]) groups[grupo] = [];
+                groups[grupo].push(p);
             });
             return groups;
         },
@@ -748,6 +761,10 @@ document.addEventListener('DOMContentLoaded', function() {
 
         for (const [proceso, data] of Object.entries(procs)) {
             const bloques = data.bloques || [];
+            const porSemana = {};
+            for (const b of bloques) {
+                (porSemana[b.semana_inicio] = porSemana[b.semana_inicio] || []).push(b);
+            }
             for (const bloque of bloques) {
                 const firstCol = colPos.find(c => c.date === bloque.fecha_min);
                 const lastCol = colPos.find(c => c.date === bloque.fecha_max);
@@ -778,7 +795,15 @@ document.addEventListener('DOMContentLoaded', function() {
                 // Label: name initials + days
                 const initials = (bloque.nombre || '?').split(/\s+/).slice(0, 2).map(s => s[0] || '').join('');
                 bar.textContent = initials + ' ' + bloque.dias + 'd';
-                bar.title = bloque.nombre + ' — ' + bloque.dias + 'd (' + proceso + ')';
+                const compañeros = porSemana[bloque.semana_inicio] || [bloque];
+                if (compañeros.length === 1) {
+                    bar.title = bloque.nombre + ' — ' + bloque.dias + 'd (' + proceso + ')';
+                } else {
+                    const lista = compañeros
+                        .map(c => (c.personal_id === bloque.personal_id ? '▸ ' : '   ') + c.nombre + ' (' + c.dias + 'd)')
+                        .join('\n');
+                    bar.title = proceso + ' — semana del ' + bloque.semana_inicio + '\n' + lista;
+                }
 
                 const handleLeft = document.createElement('div');
                 handleLeft.className = 'gantt-handle gantt-handle-left';
@@ -1089,6 +1114,33 @@ document.addEventListener('DOMContentLoaded', function() {
         if (fePopup.classList.contains('active') && !fePopup.contains(e.target)) {
             fePopup.classList.remove('active');
         }
+    });
+
+    // ========== MARCAR INSTALADO ==========
+    document.querySelectorAll('button.btn-instalar').forEach(btn => {
+        btn.addEventListener('click', function(e) {
+            e.preventDefault();
+            const row = btn.closest('tr.gantt-row');
+            if (!row) return;
+            const muebleId = row.dataset.muebleId;
+            const yaInstalado = !!row.dataset.fechaInstalado;
+            let fecha = null;
+            if (yaInstalado) {
+                if (!confirm('Revertir instalación del mueble?')) return;
+            } else {
+                const hoy = new Date().toISOString().slice(0, 10);
+                fecha = prompt('Fecha de instalación (YYYY-MM-DD):', hoy);
+                if (!fecha) return;
+                if (!/^\d{4}-\d{2}-\d{2}$/.test(fecha)) { alert('Formato inválido'); return; }
+            }
+            fetch('/muebles/' + muebleId + '/instalar', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json', 'X-CSRF-TOKEN': csrfToken, 'Accept': 'application/json' },
+                body: JSON.stringify({ fecha_instalado: fecha })
+            })
+            .then(r => r.json())
+            .then(data => { if (data.ok) location.reload(); });
+        });
     });
 
     // Rebuild Gantt bars when project becomes visible via dropdown
